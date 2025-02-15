@@ -1,0 +1,34 @@
+[
+  {
+    "Country Code": "",
+    "Country Name": "1st quartile",
+    "Total taxes absolute": "3,992,793,289.49",
+    "Total Taxes % of GDP": "0.17",
+    "Total Subnational Tax Revenue / of total government revenue 2018": "0.05",
+    "OSR / Total Taxes": "0.05"
+  },
+  {
+    "Country Code": "",
+    "Country Name": "Median",
+    "Total taxes absolute": "16,296,156,315.05",
+    "Total Taxes % of GDP": "0.25",
+    "Total Subnational Tax Revenue / of total government revenue 2018": "0.11",
+    "OSR / Total Taxes": "0.10"
+  },
+  {
+    "Country Code": "",
+    "Country Name": "3rd quartile",
+    "Total taxes absolute": "102,331,332,988.94",
+    "Total Taxes % of GDP": "0.33",
+    "Total Subnational Tax Revenue / of total government revenue 2018": "0.26",
+    "OSR / Total Taxes": "0.23"
+  },
+  {
+    "Country Code": "",
+    "Country Name": "average",
+    "Total taxes absolute": "196918554370.91",
+    "Total Taxes % of GDP": "0.26",
+    "Total Subnational Tax Revenue / of total government revenue 2018": "0.18",
+    "OSR / Total Taxes": "0.16"
+  }
+] 
