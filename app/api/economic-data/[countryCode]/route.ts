@@ -1,23 +1,29 @@
-import { NextResponse } from 'next/server'
-import economicData from '@/data/economic-data.json'
+import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { countryCode: string } }
 ) {
-  // Await the params to handle them asynchronously
-  const countryCode = await params.countryCode
+  const { countryCode } = params;
 
-  const data = economicData.find(
-    (item) => item['Country Code'] === countryCode
-  )
+  try {
+    // Mock data for demonstration purposes
+    const economicData = {
+      countryCode,
+      gdp: Math.floor(Math.random() * 1000000000000),
+      gdpGrowth: (Math.random() * 10 - 2).toFixed(2),
+      inflation: (Math.random() * 10).toFixed(2),
+      unemployment: (Math.random() * 15).toFixed(2),
+      population: Math.floor(Math.random() * 100000000),
+      year: new Date().getFullYear() - 1,
+    };
 
-  if (!data) {
+    return NextResponse.json(economicData);
+  } catch (error) {
+    console.error('Error fetching economic data:', error);
     return NextResponse.json(
-      { error: 'Economic data not found' },
-      { status: 404 }
-    )
+      { error: 'Failed to fetch economic data' },
+      { status: 500 }
+    );
   }
-
-  return NextResponse.json(data)
-} 
+}

@@ -1,114 +1,212 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useCurrency } from '../../context/CurrencyContext'
+import { useAnalysis } from '../../context/AnalysisContext'
+import { useEconomicData } from '../../hooks/useEconomicData'
 import { Country, State } from '../../types/country'
 import { EconomicData } from '../../types/economicData'
-import { CalculationData } from '../../types/calculationData'
-import CountrySelector from '../CountrySelector'
-import { getCountryEconomicData } from '../../services/economicDataService'
-import { getCountryCalculationData } from '../../services/calculationService'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { ChevronDownIcon } from '@heroicons/react/24/outline'
-import { getCountries } from '../../services/countryService'
-import TopOsrConfigModal from './TopOsrConfigModal'
-
+import { getExchangeRate, convertCurrency } from '@/app/services/currencyService'
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { ChevronDownIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
+import TopOSRConfigModal from './TopOSRConfigModal'
+import { InputField } from '../ui/InputField';
+import { Card } from '../ui/Card';
+import { SectionTitle } from '../ui/SectionTitle';
+import { usePotentialEstimates } from '../../hooks/usePotentialEstimates';
+import { useSession } from 'next-auth/react';
 
 interface AnalysisInputs {
   financialYear: string
-  currency: string
+  country: string
   state: string
+  currency: string
   actualOSR: string
   budgetedOSR: string
-  population: string
   gdp: string
+  population: string
 }
 
 interface PotentialEstimatesProps {
-  inputs: AnalysisInputs
   onInputChange: (inputs: AnalysisInputs) => void
   activeTab: string
 }
 
-export default function PotentialEstimates({ inputs, onInputChange, activeTab }: PotentialEstimatesProps) {
-  const latestYear = '2019'
-  const [selectedCountry, setSelectedCountry] = useState<Country | undefined>()
-  const [economicData, setEconomicData] = useState<EconomicData | null>(null)
-  const [calculationData, setCalculationData] = useState<CalculationData[]>([])
-  const [isFormulaVisible, setIsFormulaVisible] = useState(false)
-  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
+interface EstimatesSectionProps {
+  title: string;
+  children: React.ReactNode;
+}
 
-  // Add useEffect to set default country to Kenya
-  useEffect(() => {
-    async function setDefaultCountry() {
-      const countries = await getCountries()
-      const kenya = countries.find(country => country.iso2 === 'KE')
-      if (kenya) {
-        setSelectedCountry(kenya)
+const EstimatesSection: React.FC<EstimatesSectionProps> = ({ title, children }) => (
+  <Card className="bg-white rounded-lg shadow p-6">
+    <SectionTitle>{title}</SectionTitle>
+    <div className="space-y-4">
+      {children}
+    </div>
+  </Card>
+);
+
+export default function PotentialEstimates() {
+  const { 
+    selectedCountry, 
+    setSelectedCountry,
+    selectedState,
+    setSelectedState,
+    countries,
+    states,
+    defaultState 
+  } = useCurrency();
+  const { inputs, updateInputs } = useAnalysis();
+  const currencySymbol = selectedCountry?.currency_symbol || 'KSh';
+
+  const [isFormulaVisible, setIsFormulaVisible] = useState(false);
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+
+  // Use the economic data hook with inputs and updateInputs
+  const { economicData, exchangeRate } = useEconomicData(
+    selectedCountry || null, 
+    selectedState, 
+    defaultState,
+    {
+      ...inputs,
+      onChange: (newInputs) => {
+        updateInputs(newInputs);
       }
     }
-    setDefaultCountry()
-  }, [])
+  );
 
-  // Fetch economic data when country changes
-  useEffect(() => {
-    async function fetchEconomicData() {
-      if (selectedCountry) {
-        const data = await getCountryEconomicData(selectedCountry.iso3)
-        setEconomicData(data)
-      } else {
-        setEconomicData(null)
-      }
+  const { data: session } = useSession();
+  const { saveEstimate, loading: savingEstimate, error: saveError } = usePotentialEstimates();
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Helper function to check if we have valid GDP data
+  const hasValidGDPData = () => {
+    return inputs.gdp && inputs.gdp !== '' && !isNaN(parseFloat(inputs.gdp));
+  };
+
+  const getGDPWarningMessage = () => {
+    if (!hasValidGDPData()) {
+      return `No GDP data available for ${inputs.financialYear}. Please enter manually or select a different year.`;
     }
-    fetchEconomicData()
-  }, [selectedCountry])
+    return '';
+  };
 
-  // Fetch calculation data when country changes
-  useEffect(() => {
-    async function fetchCalculationData() {
-      if (selectedCountry) {
-        const data = await getCountryCalculationData(selectedCountry.iso3)
-        setCalculationData(data)
-      } else {
-        setCalculationData([])
-      }
+  const handleCountryChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const country = countries.find(c => c.name === event.target.value);
+    if (country) {
+      setSelectedCountry(country);
+      
+      // When country changes, we need to update the state value as well
+      // First get the default state for the new country
+      const newStates = country.states || [];
+      const newDefaultState = newStates.length > 0 ? newStates[0].name : 'Not specified';
+      
+      // Update the local state
+      setSelectedState(newDefaultState);
+      
+      // Also update the Analysis context with the new state value
+      updateInputs({ 
+        state: newDefaultState,
+        country: country.name
+      });
+      
+      console.log(`Country changed to: ${country.name}, default state set to: ${newDefaultState}`);
     }
-    fetchCalculationData()
-  }, [selectedCountry])
+  };
 
-  // Update currency and GDP when country or year changes
-  useEffect(() => {
-    if (selectedCountry) {
-      const newInputs = { 
-        ...inputs, 
-        currency: selectedCountry.currency,
-        state: '' // Reset state when country changes
-      }
-
-      // Update GDP based on selected year if economic data exists
-      if (economicData && inputs.financialYear) {
-        const gdpField = `GDP/capita ${inputs.financialYear}` as keyof EconomicData
-        newInputs.gdp = economicData[gdpField]?.toString() || inputs.gdp
-      }
-
-      onInputChange(newInputs)
-    } else {
-      onInputChange({ ...inputs, currency: '', state: '', gdp: '' })
-    }
-  }, [selectedCountry, economicData, inputs.financialYear])
-
-  // Generate years array from 2010 to 2024
-  const years = Array.from({ length: 15 }, (_, i) => 2024 - i)
+  const handleStateChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const stateValue = event.target.value;
+    
+    // Update local component state
+    setSelectedState(stateValue);
+    
+    // Update the Analysis context with the state value
+    // This ensures the state is saved with the report
+    updateInputs({ 
+      state: stateValue 
+    });
+    
+    console.log(`State changed to: ${stateValue} for country: ${selectedCountry?.name}`);
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    onInputChange({ ...inputs, [name]: value })
+    const { name, value } = e.target;
+    updateInputs({ [name]: value });
+  };
+
+  const formatValue = (value: string | number): string => {
+    if (value === '' || value === undefined || value === null) return '';
+    
+    // Convert to string if it's a number
+    const stringValue = value.toString();
+    
+    // Remove any existing commas first
+    const numericValue = stringValue.replace(/[^0-9.-]/g, '');
+    
+    // Handle negative numbers
+    const isNegative = numericValue.startsWith('-');
+    const absValue = numericValue.replace('-', '');
+    
+    // Split into whole and decimal parts
+    const parts = absValue.split('.');
+    const wholeNumber = parts[0];
+    const decimal = parts[1];
+
+    // Add commas to whole number part
+    const withCommas = wholeNumber.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    
+    // Return with decimal if it exists
+    const formattedValue = decimal ? `${withCommas}.${decimal}` : withCommas;
+    return isNegative ? `-${formattedValue}` : formattedValue;
+  };
+
+  const selectedYear = inputs.financialYear || '____';
+
+  const calculateUNHabitatEstimate = (gdp: number): number => {
+    return (gdp / 1500) * 50;
   }
 
-  const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('en-US', {
-      maximumFractionDigits: 2,
-      minimumFractionDigits: 2
-    }).format(num)
+  const calculatePercentageGap = (actualOSRPerCapita: number, unHabitatEstimate: number): number => {
+    return (actualOSRPerCapita / unHabitatEstimate) * 100;
+  }
+
+  const getAllEstimatesChartData = () => {
+    if (!hasValidGDPData() || !inputs.actualOSR || !inputs.population || !inputs.budgetedOSR) return []
+    
+    const gdp = parseFloat(inputs.gdp)
+    const actualOSR = parseFloat(inputs.actualOSR)
+    const budgetedOSR = parseFloat(inputs.budgetedOSR)
+    const population = parseFloat(inputs.population)
+    
+    if (
+      isNaN(gdp) || 
+      isNaN(actualOSR) || 
+      isNaN(budgetedOSR) || 
+      isNaN(population) || 
+      population === 0
+    ) return []
+
+    // Calculate all values
+    const actualPerCapita = actualOSR / population
+    const budgetedPerCapita = budgetedOSR / population
+   
+    const unHabitatEstimate = calculateUNHabitatEstimate(gdp)
+
+    // Create data array
+    return [
+      {
+        name: 'Actual OSR\nper capita',
+        value: actualPerCapita
+      },
+      {
+        name: 'Budgeted OSR\nper capita',
+        value: budgetedPerCapita
+      },
+      {
+        name: 'OSR Potential\nUN-Habitat',
+        value: unHabitatEstimate
+      }
+    ]
   }
 
   const calculateOSRPerCapita = () => {
@@ -120,7 +218,7 @@ export default function PotentialEstimates({ inputs, onInputChange, activeTab }:
     const osrPerCapita = osr / pop
     const currencySymbol = selectedCountry?.currency_symbol || ''
     
-    return `${currencySymbol}${formatNumber(osrPerCapita)}`
+    return `${currencySymbol}${formatValue(osrPerCapita)}`
   }
 
   const calculateBudgetedOSRPerCapita = () => {
@@ -132,154 +230,55 @@ export default function PotentialEstimates({ inputs, onInputChange, activeTab }:
     const budgetedOSRPerCapita = budgetedOSR / pop
     const currencySymbol = selectedCountry?.currency_symbol || ''
     
-    return `${currencySymbol}${formatNumber(budgetedOSRPerCapita)}`
-  }
-
-  const calculateOSRPotentialNationalComparison = () => {
-    if (!calculationData || !inputs.gdp) return 'N/A'
-    
-    const gdp = parseFloat(inputs.gdp)
-    const totalTaxesPercentGDP = parseFloat(calculationData[0]['Total Taxes % of GDP'] || '0')
-    const subnationalTaxRevenue = parseFloat(
-      calculationData[0]['Total Subnational Tax Revenue / of total government revenue 2018'] || '0'
-    )
-    
-    if (
-      isNaN(gdp) || 
-      isNaN(totalTaxesPercentGDP) || 
-      isNaN(subnationalTaxRevenue) || 
-      gdp === 0
-    ) return 'N/A'
-    
-    const potentialValue = gdp * (totalTaxesPercentGDP / 100) * (subnationalTaxRevenue / 100)
-    const currencySymbol = selectedCountry?.currency_symbol || ''
-    
-    return `${currencySymbol}${formatNumber(potentialValue)}`
-  }
-
-  const calculateOSRPotentialPeerComparison = () => {
-    if (!calculationData || !inputs.gdp || !inputs.actualOSR) return 'N/A'
-    
-    const gdp = parseFloat(inputs.gdp)
-    const osr = parseFloat(inputs.actualOSR)
-    const totalTaxesPercentGDP = parseFloat(calculationData[0]['Total Taxes % of GDP'] || '0')
-    const totalTaxes = parseFloat(calculationData[0]['Total taxes absolute'] || '0')
-    
-    if (
-      isNaN(gdp) || 
-      isNaN(osr) || 
-      isNaN(totalTaxesPercentGDP) || 
-      isNaN(totalTaxes) || 
-      gdp === 0 ||
-      totalTaxes === 0
-    ) return 'N/A'
-    
-    const potentialValue = gdp * (osr / totalTaxes) * (totalTaxesPercentGDP / 100)
-    const currencySymbol = selectedCountry?.currency_symbol || ''
-    
-    return `${currencySymbol}${formatNumber(potentialValue)}`
-  }
-
-  const calculateOSRPotentialGlobalComparison = () => {
-    if (!calculationData || !inputs.gdp) return 'N/A'
-    
-    // Get the average values from calculations data
-    const averageData = calculationData.find(data => data['Country Name'] === 'average')
-    if (!averageData) return 'N/A'
-    
-    const gdp = parseFloat(inputs.gdp)
-    const totalTaxesPercentGDP = parseFloat(averageData['Total Taxes % of GDP'] || '0')
-    const osrToTotalTaxes = parseFloat(averageData['OSR / Total Taxes'] || '0')
-    
-    if (
-      isNaN(gdp) || 
-      isNaN(totalTaxesPercentGDP) || 
-      isNaN(osrToTotalTaxes) || 
-      gdp === 0
-    ) return 'N/A'
-    
-    const potentialValue = gdp * osrToTotalTaxes * (totalTaxesPercentGDP / 100)
-    const currencySymbol = selectedCountry?.currency_symbol || ''
-    
-    return `${currencySymbol}${formatNumber(potentialValue)}`
-  }
-
-  const calculateOSRPotentialUNHabitat = () => {
-    if (!inputs.gdp) return 'N/A'
-    
-    const gdp = parseFloat(inputs.gdp)
-    
-    if (isNaN(gdp) || gdp === 0) return 'N/A'
-    
-    const potentialValue = (gdp / 1500) * 50
-    const currencySymbol = selectedCountry?.currency_symbol || ''
-    
-    return `${currencySymbol}${formatNumber(potentialValue)}`
+    return `${currencySymbol}${formatValue(budgetedOSRPerCapita)}`
   }
 
   const calculateUNHEstimateRevenueGap = () => {
-    if (!inputs.gdp || !inputs.actualOSR) return 'N/A'
-    
-    const gdp = parseFloat(inputs.gdp)
-    const actualOSR = parseFloat(inputs.actualOSR)
-    
-    if (isNaN(gdp) || isNaN(actualOSR) || gdp === 0) return 'N/A'
-    
-    // Calculate UN-Habitat estimate
-    const unHabitatEstimate = (gdp / 1500) * 50
-    
-    // Calculate the gap (UN-Habitat estimate minus actual OSR)
-    const revenueGap = unHabitatEstimate - actualOSR
-    const currencySymbol = selectedCountry?.currency_symbol || ''
-    
-    return `${currencySymbol}${formatNumber(revenueGap)}`
-  }
-
-  const calculatePercentageGap = () => {
     if (!inputs.gdp || !inputs.actualOSR || !inputs.population) return 'N/A'
     
     const gdp = parseFloat(inputs.gdp)
     const actualOSR = parseFloat(inputs.actualOSR)
     const population = parseFloat(inputs.population)
     
-    if (
-      isNaN(gdp) || 
-      isNaN(actualOSR) || 
-      isNaN(population) || 
-      gdp === 0 || 
-      population === 0
-    ) return 'N/A'
+    if (isNaN(gdp) || isNaN(actualOSR) || isNaN(population) || gdp === 0 || population === 0) return 'N/A'
     
-    // Calculate Actual OSR per capita
+    const unHabitatEstimate = calculateUNHabitatEstimate(gdp)
+    
+    // Calculate actual OSR per capita
     const actualOSRPerCapita = actualOSR / population
     
-    // Calculate UN-Habitat estimate
-    const unHabitatEstimate = (gdp / 1500) * 50
+    // Calculate the gap
+    const gap = unHabitatEstimate - actualOSRPerCapita
     
-    // Calculate percentage (actual/potential)
-    const percentageGap = (actualOSRPerCapita / unHabitatEstimate) * 100
-    
-    return `${formatNumber(percentageGap)}%`
+    return gap > 0 ? gap : 0
   }
 
-  const getGapChartData = () => {
-    if (!inputs.gdp || !inputs.actualOSR || !inputs.population) return []
+  const calculateOSRPotentialUNHabitat = () => {
+    if (!inputs.gdp) return 'N/A'
+    
+    const gdp = parseFloat(inputs.gdp)
+    if (isNaN(gdp) || gdp === 0) return 'N/A'
+    
+    const unHabitatEstimate = calculateUNHabitatEstimate(gdp)
+    const currencySymbol = selectedCountry?.currency_symbol || ''
+    
+    return `${currencySymbol}${formatValue(unHabitatEstimate)}`
+  }
+
+  const getPercentageGapText = () => {
+    if (!inputs.gdp || !inputs.actualOSR || !inputs.population) return 'N/A'
     
     const gdp = parseFloat(inputs.gdp)
     const actualOSR = parseFloat(inputs.actualOSR)
     const population = parseFloat(inputs.population)
     
-    if (isNaN(gdp) || isNaN(actualOSR) || isNaN(population) || population === 0) return []
+    if (isNaN(gdp) || isNaN(actualOSR) || isNaN(population) || gdp === 0 || population === 0) return 'N/A'
     
     const actualOSRPerCapita = actualOSR / population
-    const unHabitatEstimate = (gdp / 1500) * 50
-    const revenueGap = unHabitatEstimate - actualOSR/population
+    const unHabitatEstimate = calculateUNHabitatEstimate(gdp)
+    const percentageGap = calculatePercentageGap(actualOSRPerCapita, unHabitatEstimate)
     
-    return [{
-      name: 'OSR Gap Analysis',
-      'Actual OSR per capita': actualOSRPerCapita,
-      'Revenue Gap': revenueGap > 0 ? revenueGap : 0,
-    }]
+    return `${percentageGap.toFixed(1)}%`
   }
 
   const getAnalysisText = () => {
@@ -298,302 +297,330 @@ export default function PotentialEstimates({ inputs, onInputChange, activeTab }:
     ) return ''
     
     const actualOSRPerCapita = actualOSR / population
-    const unHabitatEstimate = (gdp / 1500) * 50
-    const percentageGap = actualOSRPerCapita / unHabitatEstimate
+    const unHabitatEstimate = calculateUNHabitatEstimate(gdp)
+    const percentageGap = calculatePercentageGap(actualOSRPerCapita, unHabitatEstimate) / 100
     
     if (percentageGap < 0.3) {
-      return `Actual OSR is at only ${formatNumber(percentageGap * 100)}% of potential. There is significant room for improvement.`
-    } else if (percentageGap >= 0.3 && percentageGap < 0.7) {
-      return `Actual OSR is at only ${formatNumber(percentageGap * 100)}% of potential. There is some room for improvement.`
+      return 'Your OSR collection is significantly below potential. Consider reviewing your revenue policies and collection methods.';
+    } else if (percentageGap < 0.6) {
+      return 'Your OSR collection shows room for improvement. Focus on strengthening existing revenue streams.';
+    } else if (percentageGap < 0.9) {
+      return 'Your OSR collection is good but could be optimized further.';
     } else {
-      return `Actual OSR is at only ${formatNumber(percentageGap * 100)}% of potential. There is not much room for improvement.`
+      return 'Your OSR collection is very strong, meeting or exceeding estimates.';
     }
   }
 
-  const selectedYear = inputs.financialYear || '____'
-
-  // Add this function to calculate all estimates
-  const getAllEstimatesChartData = () => {
-    if (!inputs.gdp || !inputs.actualOSR || !inputs.population || !inputs.budgetedOSR) return []
+  const getGapChartData = () => {
+    if (!inputs.gdp || !inputs.actualOSR || !inputs.population) return []
     
     const gdp = parseFloat(inputs.gdp)
     const actualOSR = parseFloat(inputs.actualOSR)
-    const budgetedOSR = parseFloat(inputs.budgetedOSR)
     const population = parseFloat(inputs.population)
     
-    if (
-      isNaN(gdp) || 
-      isNaN(actualOSR) || 
-      isNaN(budgetedOSR) || 
-      isNaN(population) || 
-      population === 0
-    ) return []
-
-    // Calculate all values
-    const actualPerCapita = actualOSR / population
-    const budgetedPerCapita = budgetedOSR / population
-    const unHabitatEstimate = (gdp / 1500) * 50
+    if (isNaN(gdp) || isNaN(actualOSR) || isNaN(population) || population === 0) return []
     
-    // Calculate National Comparison using calculation data
-    let nationalComparison = gdp * 0.02 // Default value if calculation data not available
-    if (calculationData.length > 0) {
-      const countryData = calculationData[0] // Use first entry for country data
-      const totalTaxesPercentGDP = parseFloat(countryData['Total Taxes % of GDP'] || '0')
-      const subnationalTaxRevenue = parseFloat(
-        countryData['Total Subnational Tax Revenue / of total government revenue 2018'] || '0'
-      )
-      if (!isNaN(totalTaxesPercentGDP) && !isNaN(subnationalTaxRevenue)) {
-        nationalComparison = (gdp * (totalTaxesPercentGDP/100) * subnationalTaxRevenue) / population
-      }
-    }
+    const actualOSRPerCapita = actualOSR / population
+    const unHabitatEstimate = calculateUNHabitatEstimate(gdp)
+    const revenueGap = unHabitatEstimate - actualOSRPerCapita
     
-    // For global comparison, use default values if calculation data is not available
-    let globalComparison = gdp * 0.016 // Default to 1.6% if no calculation data
-    if (calculationData.length > 0) {
-      const averageData = calculationData.find(data => data['Country Name'] === 'average')
-      if (averageData) {
-        const totalTaxesPercentGDP = parseFloat(averageData['Total Taxes % of GDP'])
-        const osrToTotalTaxes = parseFloat(averageData['OSR / Total Taxes'])
-        if (!isNaN(totalTaxesPercentGDP) && !isNaN(osrToTotalTaxes)) {
-          globalComparison = gdp * osrToTotalTaxes * (totalTaxesPercentGDP / 100)
-        }
-      }
-    }
-
-    // Create data array
-    return [
-      {
-        name: 'Actual OSR\nper capita',
-        value: actualPerCapita
-      },
-      {
-        name: 'Budgeted OSR\nper capita',
-        value: budgetedPerCapita
-      },
-      {
-        name: 'OSR Potential\nNational Comparison',
-        value: nationalComparison
-      },
-      {
-        name: 'OSR Potential\nGlobal Comparison',
-        value: globalComparison
-      },
-      {
-        name: 'OSR Potential\nUN-Habitat',
-        value: unHabitatEstimate
-      }
-    ]
+    return [{
+      name: 'OSR Gap Analysis',
+      'Actual OSR Per Capita': actualOSRPerCapita,
+      'Revenue Gap': revenueGap > 0 ? revenueGap : 0
+    }]
   }
 
+  const handleSaveEstimate = async () => {
+    if (!session) {
+      alert('Please sign in to save estimates');
+      return;
+    }
+
+    if (!inputs.actualOSR || !inputs.budgetedOSR || !inputs.population || !inputs.gdp) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    setSaveSuccess(false);
+
+    try {
+      // Determine the state value to use, prioritizing the one in the Analysis context
+      const stateToUse = inputs.state || selectedState || defaultState || 'Not specified';
+      
+      // Make sure we have the correct country code
+      const countryCode = selectedCountry?.iso2 || selectedCountry?.iso3 || '';
+      console.log('Country code being used:', countryCode, 'for country:', selectedCountry?.name);
+      
+      const estimateData = {
+        country: selectedCountry?.name || '',
+        countryCode: countryCode,
+        state: stateToUse,
+        financialYear: inputs.financialYear,
+        currency: selectedCountry?.currency || '',
+        currencySymbol: selectedCountry?.currency_symbol || '',
+        actualOSR: inputs.actualOSR,
+        budgetedOSR: inputs.budgetedOSR,
+        population: inputs.population,
+        gdpPerCapita: inputs.gdp,
+      };
+
+      // Log the data being sent
+      console.log('Saving estimate with data:', JSON.stringify(estimateData, null, 2));
+      console.log(`State being saved: ${stateToUse} for country: ${selectedCountry?.name}`);
+
+      const result = await saveEstimate(estimateData);
+      
+      if (result) {
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
+      }
+    } catch (error) {
+      console.error('Error saving estimate:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!inputs.financialYear) {
+      updateInputs({ financialYear: '2019' });
+    }
+  }, []);
+
+  // Initialize selectedState from Analysis context only on initial load
+  useEffect(() => {
+    // Only set the state from context if we don't already have a selected state
+    // This prevents overriding the state when the country changes
+    if (inputs.state && !selectedState) {
+      setSelectedState(inputs.state);
+      console.log(`Initialized state from context: ${inputs.state}`);
+    }
+  }, [inputs.state, selectedState]);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Main Content */}
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Left Column - 1/3 */}
         <div className="lg:w-1/3 space-y-6">
           {/* Inputs & Analysis Section */}
           <div className="bg-white dark:bg-white/5 shadow-lg dark:backdrop-blur-lg rounded-2xl border border-gray-200 dark:border-white/10 p-6">
-            <h3 className="text-xl font-semibold text-primary-light dark:text-primary-dark mb-6">
-              Inputs & Analysis
-            </h3>
+            
             <div className="space-y-6">
               {/* Location Selection Group */}
               <div className="space-y-4">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
+                <h4 className="text-sm font-medium text-blue-500 dark:text-blue-400 border-b border-blue-200 dark:border-blue-800 pb-2">
                   Location Details
                 </h4>
                 <div className="grid grid-cols-1 gap-4">
                   {/* Country Selector */}
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
                       Country
                     </label>
-                    <CountrySelector
-                      onSelect={(country) => {
-                        setSelectedCountry(country)
-                        onInputChange({ ...inputs, state: '' })
-                      }}
-                      selectedCountry={selectedCountry}
-                    />
+                    <select
+                      value={selectedCountry?.name || ''}
+                      onChange={handleCountryChange}
+                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 
+                        focus:outline-none focus:ring-blue-500 focus:border-blue-500 
+                        bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
+                        sm:text-sm rounded-md"
+                    >
+                      {countries.map((country) => (
+                        <option key={country.iso3} value={country.name}>
+                          {country.name} ({country.iso3})
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
-                  {/* State/Province Selector */}
+                  {/* State/Region Selector */}
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      State/Province
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                      State/Region in {selectedCountry?.name || 'Country'}
                     </label>
                     <select
-                      name="state"
-                      value={inputs.state}
-                      onChange={(e) => handleInputChange(e as unknown as React.ChangeEvent<HTMLInputElement>)}
-                      className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
-                      disabled={!selectedCountry}
+                      value={selectedState}
+                      onChange={handleStateChange}
+                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 
+                        focus:outline-none focus:ring-blue-500 focus:border-blue-500 
+                        bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
+                        sm:text-sm rounded-md"
                     >
-                      <option value="">Select {selectedCountry?.states?.[0]?.type || 'state/province'}</option>
-                      {selectedCountry?.states?.map((state) => (
+                      {states.map((state) => (
                         <option key={state.id} value={state.name}>
                           {state.name}
                         </option>
                       ))}
                     </select>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Select a state or region within {selectedCountry?.name || 'the selected country'}
+                    </p>
                   </div>
                 </div>
               </div>
 
               {/* Time and Currency Group */}
               <div className="space-y-4">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
+                <h4 className="text-sm font-medium text-blue-500 dark:text-blue-400 border-b border-blue-200 dark:border-blue-800 pb-2">
                   Time Period & Currency
                 </h4>
                 <div className="grid grid-cols-1 gap-4">
                   {/* Year Selector */}
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
                       Financial Year
                     </label>
                     <select
                       name="financialYear"
                       value={inputs.financialYear}
-                      onChange={(e) => handleInputChange(e as unknown as React.ChangeEvent<HTMLInputElement>)}
-                      className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
+                      onChange={(e) => {
+                        updateInputs({ financialYear: e.target.value });
+                      }}
+                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 
+                        focus:outline-none focus:ring-blue-500 focus:border-blue-500 
+                        bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
+                        sm:text-sm rounded-md"
                     >
-                      {years.map((year) => (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      ))}
+                      {Array.from({ length: new Date().getFullYear() - 2010 + 1 }, (_, i) => {
+                        const year = 2010 + i;
+                        return (
+                          <option key={year} value={year.toString()}>
+                            {year}
+                          </option>
+                        );
+                      }).reverse()}
                     </select>
                   </div>
 
                   {/* Currency Dropdown */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
                       Currency
                     </label>
-                    <select
-                      name="currency"
-                      value={inputs.currency}
-                      onChange={(e) => handleInputChange(e as unknown as React.ChangeEvent<HTMLInputElement>)}
-                      className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
-                      disabled={!selectedCountry}
-                    >
-                      <option value="">Select currency</option>
-                      {selectedCountry && (
-                        <option value={selectedCountry.currency}>
-                          {selectedCountry.currency} - {selectedCountry.currency_name} ({selectedCountry.currency_symbol})
-                        </option>
-                      )}
-                    </select>
+                    <div className="mt-1 relative rounded-md shadow-sm">
+                      <input
+                        type="text"
+                        value={`${selectedCountry?.currency || 'KES'} - ${selectedCountry?.currency_name || 'Kenyan shilling'} (${selectedCountry?.currency_symbol || 'KSh'})`}
+                        disabled
+                        className="mt-1 block w-full pl-3 pr-10 py-2 text-base 
+                          border-gray-300 dark:border-gray-600
+                          bg-gray-100 dark:bg-gray-600 
+                          text-gray-700 dark:text-gray-300
+                          focus:outline-none focus:ring-blue-500 focus:border-blue-500 
+                          sm:text-sm rounded-md cursor-not-allowed"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Financial Data Group */}
               <div className="space-y-4">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
+                <h4 className="text-sm font-medium text-blue-500 dark:text-blue-400 border-b border-blue-200 dark:border-blue-800 pb-2">
                   Financial Data
                 </h4>
                 <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
                       Actual OSR in {selectedYear}
                     </label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <span className="text-gray-500">
-                          {selectedCountry?.currency_symbol || '$'}
-                        </span>
-                      </div>
+                      <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400">
+                        {currencySymbol}
+                      </span>
                       <input
                         type="text"
                         name="actualOSR"
-                        value={inputs.actualOSR}
+                        value={formatValue(inputs.actualOSR)}
                         onChange={handleInputChange}
-                        placeholder="Enter amount"
-                        className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-12 pr-4 py-2 rounded-lg 
+                          border border-gray-300 dark:border-gray-600 
+                          bg-white dark:bg-gray-700 
+                          text-gray-900 dark:text-gray-100
+                          focus:ring-2 focus:ring-blue-500 
+                          placeholder-gray-400 dark:placeholder-gray-500"
+                        placeholder="Enter actual OSR"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
                       Budgeted OSR in {selectedYear}
                     </label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <span className="text-gray-500">
-                          {selectedCountry?.currency_symbol || '$'}
-                        </span>
-                      </div>
+                      <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400">
+                        {currencySymbol}
+                      </span>
                       <input
                         type="text"
                         name="budgetedOSR"
-                        value={inputs.budgetedOSR}
+                        value={formatValue(inputs.budgetedOSR)}
                         onChange={handleInputChange}
-                        placeholder="Enter amount"
-                        className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-12 pr-4 py-2 rounded-lg 
+                          border border-gray-300 dark:border-gray-600 
+                          bg-white dark:bg-gray-700 
+                          text-gray-900 dark:text-gray-100
+                          focus:ring-2 focus:ring-blue-500 
+                          placeholder-gray-400 dark:placeholder-gray-500"
+                        placeholder="Enter budgeted OSR"
                       />
                     </div>
                   </div>
-                </div>
-              </div>
 
-              {/* Economic Data Group */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
-                  Economic Data
-                </h4>
-                <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
                       Population in {selectedYear}
                     </label>
                     <input
-                      type="number"
+                      type="text"
                       name="population"
-                      value={inputs.population}
+                      value={formatValue(inputs.population)}
                       onChange={handleInputChange}
                       placeholder="Enter population"
-                      className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      GDP in {selectedYear}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                      GDP per capita in {selectedYear}
                     </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <span className="text-gray-500">
-                          {selectedCountry?.currency_symbol || '$'}
+                    <div className="mt-1 relative">
+                      <div className="relative">
+                        <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500 dark:text-gray-400">
+                          {currencySymbol}
                         </span>
+                        <input
+                          type="text"
+                          name="gdp"
+                          value={inputs.gdp || ''}
+                          onChange={handleInputChange}
+                          placeholder="Enter GDP per capita"
+                          className="mt-1 block w-full pl-12 pr-3 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                        />
                       </div>
-                      <input
-                        type="text"
-                        name="gdp"
-                        value={inputs.gdp}
-                        onChange={handleInputChange}
-                        placeholder="Enter GDP"
-                        className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
-                      />
+                      {!hasValidGDPData() && (
+                        <p className="mt-1 text-sm text-yellow-600">
+                          {getGDPWarningMessage()}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-
-      
-      </div>
+        </div>
         {/* Right Column - 2/3 */}
         <div className="lg:w-2/3 space-y-6">
           {/* Charts Container */}
           <div className="space-y-6">
             {/* Rapid Estimate of OSR Gap Section */}
-            <div className="bg-white dark:bg-white/5 shadow-lg dark:backdrop-blur-lg rounded-2xl border border-gray-200 dark:border-white/10 p-6">
-              <h3 className="text-xl font-semibold text-primary-light dark:text-primary-dark mb-6">
+            <div className="bg-white dark:bg-gray-800 shadow-lg rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
+              <h4 className="text-sm font-medium text-blue-500 dark:text-blue-400 text-center mb-3">
                 Rapid Estimate of OSR Gap
-              </h3>
+              </h4>
               <div className="h-[400px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
@@ -630,7 +657,7 @@ export default function PotentialEstimates({ inputs, onInputChange, activeTab }:
                     />
                     <Tooltip 
                       formatter={(value: number) => [
-                        `${selectedCountry?.currency_symbol || '$'}${formatNumber(value)}`,
+                        `${selectedCountry?.currency_symbol || '$'}${formatValue(value)}`,
                         value === 0 ? 'No Gap' : ''
                       ]}
                       contentStyle={{
@@ -648,17 +675,17 @@ export default function PotentialEstimates({ inputs, onInputChange, activeTab }:
                       iconSize={8}
                     />
                     <Bar 
-                      dataKey="Actual OSR per capita" 
+                      dataKey="Actual OSR Per Capita" 
                       stackId="a" 
                       fill="#60A5FA"  // Using a blue similar to the image
-                      name="Actual Revenue"
+                      name="Actual OSR Per Capita"
                       radius={[4, 4, 0, 0]}
                     />
                     <Bar 
                       dataKey="Revenue Gap" 
                       stackId="a" 
                       fill="#F97316"  // Using an orange similar to the image
-                      name="Total Gap Mixed Fees"
+                      name="Revenue Gap"
                       radius={[4, 4, 0, 0]}
                     />
                   </BarChart>
@@ -669,13 +696,20 @@ export default function PotentialEstimates({ inputs, onInputChange, activeTab }:
               <div className="mt-8">
                 <button
                   onClick={() => setIsFormulaVisible(!isFormulaVisible)}
-                  className="w-full flex items-center justify-between p-4 bg-blue-50/50 dark:bg-blue-900/20 rounded-t-xl border border-blue-100 dark:border-blue-800 hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-colors"
+                  className="w-full flex items-center justify-between p-4 
+                    bg-white dark:bg-gray-700 
+                    rounded-t-xl border border-gray-200 dark:border-gray-600 
+                    hover:bg-gray-50 dark:hover:bg-gray-600 
+                    transition-colors"
                 >
-                  <h4 className="text-lg font-semibold text-primary-light dark:text-primary-dark">
-                    Formula Used
-                  </h4>
+                  <div className="flex items-center gap-3">
+                    <DocumentTextIcon className="h-4 w-4 text-gray-500 dark:text-gray-300" />
+                    <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                      Rapid Estimate Formula
+                    </span>
+                  </div>
                   <ChevronDownIcon 
-                    className={`w-5 h-5 text-primary-light dark:text-primary-dark transition-transform duration-200 ${
+                    className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${
                       isFormulaVisible ? 'rotate-180' : ''
                     }`}
                   />
@@ -684,113 +718,61 @@ export default function PotentialEstimates({ inputs, onInputChange, activeTab }:
                 <div className={`overflow-hidden transition-all duration-200 ease-in-out ${
                   isFormulaVisible ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
                 }`}>
-                  <div className="p-6 bg-blue-50/50 dark:bg-blue-900/20 rounded-b-xl border-x border-b border-blue-100 dark:border-blue-800">
-                    <div className="space-y-4">
-                      <div className="flex flex-col gap-2">
-                        <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
-                          UN-Habitat Top-down Estimate:
-                        </p>
-                        <div className="bg-white dark:bg-gray-800 p-3 rounded-lg inline-block">
-                          <code className="text-blue-600 dark:text-blue-400">
-                            (GDP / 1,500) × 50
-                          </code>
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
-                          Actual OSR per capita:
-                        </p>
-                        <div className="bg-white dark:bg-gray-800 p-3 rounded-lg inline-block">
-                          <code className="text-blue-600 dark:text-blue-400">
-                            Actual OSR / Population
-                          </code>
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
-                          Revenue Gap per capita:
-                        </p>
-                        <div className="bg-white dark:bg-gray-800 p-3 rounded-lg inline-block">
-                          <code className="text-blue-600 dark:text-blue-400">
-                            UN-Habitat Estimate - Actual OSR per capita
-                          </code>
+                  <div className="p-6 bg-white dark:bg-gray-700 rounded-b-xl border-x border-b border-gray-200 dark:border-gray-600">
+                    <div className="space-y-6">
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <h5 className="text-base font-medium text-gray-900 dark:text-gray-100">
+                            UN-Habitat Top-down Estimate:
+                          </h5>
+                          <div className="flex items-center gap-2 text-sm">
+                            <code className="text-blue-500 dark:text-blue-400">
+                              OSR Potential = (GDP per capita / 1500) × 50
+                            </code>
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-300">
+                            This formula is based on UN-Habitat's methodology for estimating potential OSR.
+                            It suggests that a local government should be able to collect approximately 3.33% of GDP per capita.
+                          </p>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
+              </div>
 
-                {/* Analysis Text Section */}
-                <div className="mt-8 p-6 bg-gray-50 dark:bg-gray-900/50 rounded-xl">
-                  <h4 className="text-lg font-semibold text-primary-light dark:text-primary-dark mb-4">
+              {/* Analysis Text Section */}
+              <div className="mt-8">
+              <h4 className="text-base font-medium text-gray-900 dark:text-gray-100 mb-3">
                     Gap Analysis
                   </h4>
-                  <p className="text-text-light dark:text-text-dark text-lg leading-relaxed">
+                <div className="p-6 bg-blue-50 dark:bg-blue-900/30 rounded-xl">
+                 
+                  <p className="text-gray-700 dark:text-gray-200 text-base leading-relaxed">
                     {getAnalysisText() || 'Please enter all required data to see the analysis.'}
                   </p>
                 </div>
               </div>
-
-              {/* Actual OSR vs Estimates of OSR Potential Section */}
-              <div className="bg-white dark:bg-white/5 shadow-lg dark:backdrop-blur-lg rounded-2xl border border-gray-200 dark:border-white/10 p-6">
-                <h3 className="text-xl font-semibold text-primary-light dark:text-primary-dark mb-6">
-                  Actual OSR vs Estimates of OSR Potential
-                </h3>
-                <div className="h-[400px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={getAllEstimatesChartData()}
-                      margin={{
-                        top: 20,
-                        right: 30,
-                        left: 50,
-                        bottom: 120,
-                      }}
-                    >
-                      <XAxis 
-                        dataKey="name" 
-                        angle={0}
-                        textAnchor="middle"
-                        height={120}
-                        interval={0}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis 
-                        label={{ 
-                          value: `${selectedCountry?.currency_symbol || '$'} per capita`,
-                          angle: -90,
-                          position: 'insideLeft',
-                          offset: -40,
-                          style: { fill: '#888' }
-                        }}
-                      />
-                      <Tooltip 
-                        formatter={(value: number) => [
-                          `${selectedCountry?.currency_symbol || '$'}${formatNumber(value)}`,
-                          'Value'
-                        ]}
-                      />
-                      <Bar 
-                        dataKey="value" 
-                        fill="#ed6d85"
-                        name="Amount per capita"
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
             </div>
-          </div>
 
-          {/* Config Modal */}
-          {isConfigModalOpen && (
-            <TopOsrConfigModal
-              isOpen={isConfigModalOpen}
-              onClose={() => setIsConfigModalOpen(false)}
-            />
-          )}
+           
+          </div>
         </div>
     </div>
-    </div>
+    {/* Add exchange rate footer */}
+    {exchangeRate && selectedCountry && (
+      <div className="mt-8 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+        <div className="flex items-center justify-center space-x-2 text-gray-600 dark:text-gray-300">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+          </svg>
+          <span>Exchange Rate: 1 USD = {exchangeRate.toFixed(2)} {selectedCountry.currency}</span>
+        </div>
+        <div className="text-center text-xs mt-1 text-gray-500 dark:text-gray-400">
+          Data from exchangerate-api.com
+        </div>
+      </div>
+    )}
+  </div>
   )
 }

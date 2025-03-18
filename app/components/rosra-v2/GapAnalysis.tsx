@@ -1,126 +1,176 @@
-'use client'
+'use client';
 
-import React, { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import PropertyTaxAnalysis from './gap-analysis/PropertyTaxAnalysis';
-import LicenseAnalysis from './gap-analysis/LicenseAnalysis';
-import MixedUserChargeAnalysis from './gap-analysis/MixedUserChargeAnalysis';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+// Comment out problematic imports for now
+// import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
+// import { Card } from '@/app/components/ui/card';
+import { useGapAnalysis } from '@/app/hooks/useGapAnalysis';
+import { GapAnalysisProps, TabConfig } from '@/app/types/analysis';
+import PropertyTaxAnalysis from './gap-analysis/property-tax/PropertyTaxAnalysis';
+import LicenseAnalysis from './gap-analysis/license/LicenseAnalysis';
 import ShortTermUserChargeAnalysis from './gap-analysis/ShortTermUserChargeAnalysis';
 import LongTermUserChargeAnalysis from './gap-analysis/LongTermUserChargeAnalysis';
+import MixedUserChargeAnalysis from './gap-analysis/MixedUserChargeAnalysis';
 import TotalEstimateAnalysis from './gap-analysis/TotalEstimateAnalysis';
+import TabButton from '@/app/components/ui/TabButton';
 
-interface GapAnalysisProps {
-  className?: string;
-  inputs?: AnalysisInputs;
-  onInputChange?: (newInputs: AnalysisInputs) => void;
+// Configuration for tabs
+const TABS: TabConfig[] = [
+  {
+    id: 'propertyTax',
+    label: 'Property Tax',
+    component: PropertyTaxAnalysis
+  },
+  {
+    id: 'license',
+    label: 'License',
+    component: LicenseAnalysis
+  },
+  {
+    id: 'shortTermUserCharge',
+    label: 'Short Term User Charge',
+    component: ShortTermUserChargeAnalysis
+  },
+  {
+    id: 'longTermUserCharge',
+    label: 'Long Term User Charge',
+    component: LongTermUserChargeAnalysis
+  },
+  {
+    id: 'mixedUserCharge',
+    label: 'Mixed User Charge',
+    component: MixedUserChargeAnalysis
+  },
+  {
+    id: 'totalEstimate',
+    label: 'Total Estimate',
+    component: TotalEstimateAnalysis
+  }
+];
+
+// Update the props interface to include the new callbacks and initial data
+interface ExtendedGapAnalysisProps extends GapAnalysisProps {
+  onPropertyTaxData?: (data: any) => void;
+  onLicenseData?: (data: any) => void;
+  initialPropertyTaxData?: any;
+  initialLicenseData?: any;
 }
 
-const GapAnalysis = ({ className, inputs, onInputChange }: GapAnalysisProps) => {
-  const [activeSubTab, setActiveSubTab] = useState('property-tax');
-  const [metrics, setMetrics] = useState({
-    propertyTax: { actualRevenue: 0, potentialRevenue: 0, gap: 0 },
-    license: { actualRevenue: 0, potentialRevenue: 0, gap: 0 },
-    mixedUser: { actualRevenue: 0, potentialRevenue: 0, gap: 0 },
-    shortTerm: { actualRevenue: 0, potentialRevenue: 0, gap: 0 },
-    longTerm: { actualRevenue: 0, potentialRevenue: 0, gap: 0 }
-  });
+export default function GapAnalysis({ 
+  className = '', 
+  onPropertyTaxData,
+  onLicenseData,
+  initialPropertyTaxData,
+  initialLicenseData
+}: ExtendedGapAnalysisProps) {
+  const {
+    activeTab,
+    inputs,
+    handleTabChange,
+    handleInputChange,
+    isTabActive
+  } = useGapAnalysis();
 
-  const handleMetricsChange = (type: keyof typeof metrics, newMetrics: any) => {
-    setMetrics(prev => ({
-      ...prev,
-      [type]: newMetrics
-    }));
-  };
+  // Add state to store data from child components
+  const [propertyTaxData, setPropertyTaxData] = useState<any>(initialPropertyTaxData || null);
+  const [licenseData, setLicenseData] = useState<any>(initialLicenseData || null);
+  
+  // Add refs to track if initial data has been set
+  const initialPropertyTaxDataSetRef = useRef<boolean>(false);
+  const initialLicenseDataSetRef = useRef<boolean>(false);
 
-  const subTabs = [
-    { id: 'property-tax', name: 'Property Tax' },
-    { id: 'license', name: 'License' },
-    { id: 'mixed-user', name: 'Mixed User' },
-    { id: 'short-term', name: 'Short Term' },
-    { id: 'long-term', name: 'Long Term' },
-    { id: 'total-estimate', name: 'Total Estimate' }
-  ];
-
-  const renderSubTabContent = () => {
-    switch (activeSubTab) {
-      case 'property-tax':
-        return <PropertyTaxAnalysis onMetricsChange={(m) => handleMetricsChange('propertyTax', m)} />;
-      
-      case 'license':
-        return <LicenseAnalysis onMetricsChange={(m) => handleMetricsChange('license', m)} />;
-      
-      case 'mixed-user':
-        return <MixedUserChargeAnalysis onMetricsChange={(m) => handleMetricsChange('mixedUser', m)} />;
-      
-      case 'short-term':
-        return <ShortTermUserChargeAnalysis onMetricsChange={(m) => handleMetricsChange('shortTerm', m)} />;
-      
-      case 'long-term':
-        return <LongTermUserChargeAnalysis onMetricsChange={(m) => handleMetricsChange('longTerm', m)} />;
-      
-      case 'total-estimate':
-        return (
-          <TotalEstimateAnalysis
-            revenueStreams={[
-              {
-                name: 'Property Tax',
-                type: 'Property Tax',
-                ...metrics.propertyTax,
-                categories: []
-              },
-              {
-                name: 'License',
-                type: 'License',
-                ...metrics.license,
-                categories: []
-              },
-              {
-                name: 'Mixed User Charge',
-                type: 'Mixed User Charge',
-                ...metrics.mixedUser,
-                categories: []
-              },
-              {
-                name: 'Short Term User Charge',
-                type: 'Short-term User Charge',
-                ...metrics.shortTerm,
-                categories: []
-              },
-              {
-                name: 'Long Term User Charge',
-                type: 'Long-term User Charge',
-                ...metrics.longTerm,
-                categories: []
-              }
-            ]}
-          />
-        );
-      
-      default:
-        return null;
+  // Update state when initial data changes
+  useEffect(() => {
+    if (initialPropertyTaxData && !initialPropertyTaxDataSetRef.current) {
+      console.log('Initializing property tax data in GapAnalysis:', initialPropertyTaxData);
+      setPropertyTaxData(initialPropertyTaxData);
+      initialPropertyTaxDataSetRef.current = true;
     }
-  };
+  }, [initialPropertyTaxData]);
+
+  useEffect(() => {
+    if (initialLicenseData && !initialLicenseDataSetRef.current) {
+      console.log('Initializing license data in GapAnalysis:', initialLicenseData);
+      setLicenseData(initialLicenseData);
+      initialLicenseDataSetRef.current = true;
+    }
+  }, [initialLicenseData]);
+
+  // Memoize the handlers to prevent unnecessary re-renders
+  const handlePropertyTaxDataChange = useCallback((data: any) => {
+    console.log('PropertyTaxAnalysis data received in GapAnalysis:', data);
+    setPropertyTaxData(data);
+  }, []); // Empty dependency array since it only uses setState
+
+  const handleLicenseDataChange = useCallback((data: any) => {
+    console.log('LicenseAnalysis data received in GapAnalysis:', data);
+    setLicenseData(data);
+  }, []); // Empty dependency array since it only uses setState
+
+  // Memoize the parent callbacks to prevent unnecessary re-renders
+  const memoizedPropertyTaxCallback = useCallback((data: any) => {
+    if (onPropertyTaxData) {
+      onPropertyTaxData(data);
+    }
+  }, [onPropertyTaxData]);
+
+  const memoizedLicenseCallback = useCallback((data: any) => {
+    if (onLicenseData) {
+      onLicenseData(data);
+    }
+  }, [onLicenseData]);
+
+  // Log data changes for debugging and notify parent
+  useEffect(() => {
+    if (propertyTaxData) {
+      console.log('GapAnalysis received propertyTaxData:', propertyTaxData);
+      memoizedPropertyTaxCallback(propertyTaxData);
+    }
+  }, [propertyTaxData, memoizedPropertyTaxCallback]);
+
+  useEffect(() => {
+    if (licenseData) {
+      console.log('GapAnalysis received licenseData:', licenseData);
+      memoizedLicenseCallback(licenseData);
+    }
+  }, [licenseData, memoizedLicenseCallback]);
+
+  // Find the active component
+  const ActiveComponent = TABS.find(tab => tab.id === activeTab)?.component;
 
   return (
-    <div className={`${className} bg-white dark:bg-gray-900 rounded-lg shadow-lg`}>
-      <Tabs defaultValue={activeSubTab} onValueChange={setActiveSubTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-6 bg-gray-100 dark:bg-gray-800 rounded-t-lg">
-          {subTabs.map(tab => (
-            <TabsTrigger 
-              key={tab.id} 
-              value={tab.id}
-              className="text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+    <div className={`gap-analysis-container ${className}`}>
+      <div className="flex flex-col h-full">
+        <div className="flex space-x-2 mb-4 overflow-x-auto">
+          {TABS.map((tab) => (
+            <TabButton
+              key={tab.id}
+              active={isTabActive(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
             >
-              {tab.name}
-            </TabsTrigger>
+              {tab.label}
+            </TabButton>
           ))}
-        </TabsList>
-        <TabsContent value={activeSubTab} className="p-6 dark:bg-gray-900">
-          {renderSubTabContent()}
-        </TabsContent>
-      </Tabs>
+        </div>
+        
+        <div className="flex-1 overflow-auto">
+          {ActiveComponent === PropertyTaxAnalysis && (
+            <PropertyTaxAnalysis
+              onDataChange={handlePropertyTaxDataChange}
+              initialData={propertyTaxData}
+            />
+          )}
+          {ActiveComponent === LicenseAnalysis && (
+            <LicenseAnalysis
+              onMetricsChange={handleLicenseDataChange}
+              initialData={licenseData}
+            />
+          )}
+          {ActiveComponent && ActiveComponent !== PropertyTaxAnalysis && ActiveComponent !== LicenseAnalysis && (
+            <ActiveComponent />
+          )}
+        </div>
+      </div>
     </div>
   );
-};
-
-export default GapAnalysis;
+}

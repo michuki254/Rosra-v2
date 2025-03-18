@@ -9,17 +9,33 @@ export default function ThemeToggle() {
   return (
     <button 
       onClick={toggleTheme}
-      className="flex items-center gap-2 px-3 py-1 rounded-full border border-primary-light dark:border-primary-dark"
+      className="relative inline-flex items-center px-4 py-2 rounded-lg bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 shadow-sm border border-gray-200 dark:border-gray-700"
     >
-      <div className={`w-6 h-6 rounded-full transition-colors duration-200 ${
-        theme === 'dark' ? 'bg-primary-dark' : 'bg-gray-400'
-      }`}></div>
-      <div className={`w-6 h-6 rounded-full transition-colors duration-200 ${
-        theme === 'dark' ? 'bg-gray-600' : 'bg-primary-light'
-      }`}></div>
-      <span className="text-text-light dark:text-text-dark ml-2">
-        {theme === 'dark' ? 'Dark' : 'Light'} Mode
-      </span>
+      {/* Icons */}
+      <SunIcon className={`w-5 h-5 transition-colors duration-200 ${
+        theme === 'dark' 
+          ? 'text-gray-400 hover:text-yellow-400' 
+          : 'text-yellow-500'
+      }`} />
+      
+      {/* Slider */}
+      <div className={`mx-2 w-14 h-7 rounded-full p-1 transition-colors duration-200 ${
+        theme === 'dark' 
+          ? 'bg-gray-600 shadow-inner' 
+          : 'bg-blue-100 shadow-inner'
+      }`}>
+        <div className={`w-5 h-5 rounded-full transition-all duration-200 shadow-md ${
+          theme === 'dark'
+            ? 'bg-blue-400 transform translate-x-7' 
+            : 'bg-blue-500 transform translate-x-0'
+        }`} />
+      </div>
+      
+      <MoonIcon className={`w-5 h-5 transition-colors duration-200 ${
+        theme === 'dark' 
+          ? 'text-blue-400' 
+          : 'text-gray-400 hover:text-blue-400'
+      }`} />
     </button>
   )
 } 

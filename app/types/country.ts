@@ -23,7 +23,7 @@ export interface Translations {
 }
 
 export interface State {
-  id: number
+  id: string
   name: string
   state_code: string
   latitude: string

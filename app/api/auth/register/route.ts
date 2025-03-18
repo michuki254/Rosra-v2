@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getConnection } from '@/lib/db'
-import bcrypt from 'bcryptjs'
+import { connectToDatabase } from '@/lib/mongoose'
+import User from '@/models/User'
 
 export async function POST(req: Request) {
   try {
@@ -14,39 +14,56 @@ export async function POST(req: Request) {
       )
     }
 
-    const pool = await getConnection()
+    // Validate password length before attempting to save
+    if (password.length < 6) {
+      return NextResponse.json(
+        { error: 'Password must be at least 6 characters' },
+        { status: 400 }
+      )
+    }
+
+    // Connect to MongoDB
+    await connectToDatabase()
 
     // Check if user already exists
-    const existingUser = await pool.request()
-      .input('email', email)
-      .query('SELECT Email FROM Users WHERE Email = @email')
+    const existingUser = await User.findOne({ email })
 
-    if (existingUser.recordset.length > 0) {
+    if (existingUser) {
       return NextResponse.json(
         { error: 'Email already registered' },
         { status: 400 }
       )
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12)
+    // Create new user
+    const newUser = new User({
+      email,
+      password, // Will be hashed by the pre-save hook
+      firstName,
+      lastName,
+      organization,
+      role: 'user', // Default role
+      isActive: true,
+    })
 
-    // Insert new user
-    const result = await pool.request()
-      .input('email', email)
-      .input('passwordHash', hashedPassword)
-      .input('firstName', firstName)
-      .input('lastName', lastName)
-      .input('organization', organization)
-      .query(`
-        INSERT INTO Users (Email, PasswordHash, FirstName, LastName, Organization)
-        VALUES (@email, @passwordHash, @firstName, @lastName, @organization);
-        SELECT SCOPE_IDENTITY() AS UserId;
-      `)
+    try {
+      // Save the user to the database
+      await newUser.save()
+    } catch (saveError: any) {
+      // Handle validation errors from Mongoose
+      if (saveError.name === 'ValidationError') {
+        const validationErrors = Object.values(saveError.errors).map((err: any) => err.message);
+        return NextResponse.json(
+          { error: validationErrors.join(', ') },
+          { status: 400 }
+        )
+      }
+      throw saveError; // Re-throw if it's not a validation error
+    }
 
     return NextResponse.json({
       message: 'User registered successfully',
-      userId: result.recordset[0].UserId
+      userId: newUser._id
     })
 
   } catch (error) {

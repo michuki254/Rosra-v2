@@ -2,7 +2,6 @@ import Image from 'next/image'
 import ThemeToggle from './components/ThemeToggle'
 import FloatingCard from './components/FloatingCard'
 import Link from 'next/link'
-import Navbar from './components/Navbar'
 
 export default function Home() {
   const valueProps = [
@@ -30,8 +29,6 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
-      <Navbar />
-
       {/* Main Content Container */}
       <div className="max-w-7xl mx-auto px-8">
         {/* Hero Section - Full width background with contained content */}
@@ -53,12 +50,12 @@ export default function Home() {
                     Empower your local government with data-driven revenue optimization. ROSRA helps you analyze, visualize, and improve your revenue systems.
                   </p>
                   <div className="flex gap-4 pt-4">
-                    <Link 
+                    {/* <Link 
                       href="/rosra-v1" 
                       className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
                     >
                       SAMPLE REPORT V1
-                    </Link>
+                    </Link> */}
                     <Link 
                       href="/rosra-v2"
                       className="px-6 py-3 border border-blue-600 text-blue-400 hover:bg-blue-600/10 rounded-lg font-medium transition-colors"
@@ -599,7 +596,7 @@ export default function Home() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
               {valueProps.map((prop, index) => (
-                <FloatingCard key={prop.title}>
+                <FloatingCard key={`value-prop-${index}`}>
                   <div className="bg-white/5 backdrop-blur-lg rounded-2xl p-8 border border-white/10 hover:border-primary-dark/50 transition-colors">
                     <div className="relative w-20 h-20 mx-auto mb-6">
                       <div className="absolute inset-0 border-2 border-primary-light dark:border-primary-dark rounded-full"></div>

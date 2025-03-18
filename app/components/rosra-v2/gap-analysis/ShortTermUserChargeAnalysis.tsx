@@ -1,6 +1,6 @@
-'use client'
+'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -13,6 +13,23 @@ import {
 import { Bar } from 'react-chartjs-2';
 import { ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { DocumentTextIcon } from '@heroicons/react/24/outline';
+import { useCurrency } from '@/app/context/CurrencyContext';
+import { useShortTerm } from '@/app/context/ShortTermContext';
+import { Tooltip as ReactTooltip } from 'react-tooltip';
+import { MainInputs } from './MainInputs';
+import { CategorySection } from './CategorySection';
+import { RevenueAnalysisChart } from './RevenueAnalysisChart';
+import { RevenueSummaryCards } from './RevenueSummaryCards';
+import { GapAnalysisChart } from './GapAnalysisChart';
+import { useShortTermData } from '@/app/hooks/useShortTermData';
+import { useSession } from 'next-auth/react';
+import { toast } from 'react-hot-toast';
+import { ShortTermCategory } from '@/app/hooks/useShortTermCalculations';
+import { useParams, useSearchParams } from 'next/navigation';
+import { ShortTermCompleteData } from './GapAnalysis';
+
+// Import the LOCAL_STORAGE_KEY constant from the hook
+const LOCAL_STORAGE_KEY = 'shortTermAnalysisData';
 
 ChartJS.register(
   CategoryScale,
@@ -23,856 +40,720 @@ ChartJS.register(
   Legend
 );
 
-interface CategoryData {
-  id: string;
-  name: string;
-  isExpanded: boolean;
-  estimatedDailyFees: number;
-  actualDailyFees: number;
-  potentialRate: number;
-  actualRate: number;
-}
-
-interface ShortTermUserChargeMetrics {
-  estimatedDailyFees: number;
-  actualDailyFees: number;
-  categories: CategoryData[];
-}
-
+// Update the props interface to include ref
 interface ShortTermUserChargeAnalysisProps {
-  onMetricsChange?: (metrics: RevenueMetrics) => void;
+  onDataChange?: (data: any) => void;
+  initialData?: any;
 }
 
-interface RevenueMetrics {
-  actual: number;
-  potential: number;
-  gap: number;
-}
-
-interface Category {
-  actualDailyFees: number;
-  actualRate: number;
-}
-
-interface ShortTermInputs {
-  categories: Category[];
-}
-
-interface ShortTermMetrics {
-  categories: {
-    estimatedDailyUsers: number;
-    standardRate: number;
-    registeredDailyUsers: number;
-    averagePaidRate: number;
-  }[];
-}
-
-export const calculateActualRevenue = (inputs: ShortTermInputs) => {
-  try {
-    if (!inputs || !inputs.categories) {
-      console.error('Invalid inputs provided to calculateActualRevenue');
-      return 0;
-    }
-
-    // Formula: Actual Daily Fees × Actual Rate × 365
-    return inputs.categories.reduce((total, category) => {
-      if (!category.actualDailyFees || !category.actualRate) {
-        return total;
-      }
-      return total + (category.actualDailyFees * category.actualRate * 365);
-    }, 0);
-  } catch (error) {
-    console.error('Error calculating actual revenue:', error);
-    return 0;
-  }
-};
-
-export function calculateTotalPotentialRevenue(metrics: ShortTermMetrics) {
-  return metrics.categories.reduce((total, category) => {
-    const potentialDailyRevenue = category.estimatedDailyUsers * category.standardRate;
-    return total + (potentialDailyRevenue * 365); // Annualized
-  }, 0);
-}
-
-export function calculateTotalPotentialRevenueOld(inputs: ShortTermUserChargeMetrics) {
-  return inputs.categories.reduce((total, category) => {
-    return total + (category.estimatedDailyFees * category.potentialRate * 365);
-  }, 0);
-}
-
-export function calculateTotalGap(metrics: ShortTermMetrics) {
-  const potentialRevenue = calculateTotalPotentialRevenue(metrics);
-  const actualRevenue = calculateActualRevenue({
-    categories: metrics.categories.map(category => ({
-      actualDailyFees: category.registeredDailyUsers,
-      actualRate: category.averagePaidRate
-    }))
-  });
-  return potentialRevenue - actualRevenue;
-}
-
-export default function ShortTermUserChargeAnalysis({ onMetricsChange }: ShortTermUserChargeAnalysisProps) {
-  const [inputs, setInputs] = useState<ShortTermUserChargeMetrics>({
-    estimatedDailyFees: 1000,
-    actualDailyFees: 700,
-    categories: [
-      {
-        id: '1',
-        name: 'Parking Fees',
-        isExpanded: false,
-        estimatedDailyFees: 600,
-        actualDailyFees: 500,
-        potentialRate: 100,
-        actualRate: 10
-      },
-      {
-        id: '2',
-        name: 'Market Stall Fees',
-        isExpanded: false,
-        estimatedDailyFees: 100,
-        actualDailyFees: 50,
-        potentialRate: 50,
-        actualRate: 5
-      },
-      {
-        id: '3',
-        name: 'Public Facility Usage',
-        isExpanded: false,
-        estimatedDailyFees: 300,
-        actualDailyFees: 150,
-        potentialRate: 150,
-        actualRate: 20
-      }
-    ]
-  });
+// Export the component with forwardRef
+const ShortTermUserChargeAnalysis = forwardRef(({ onDataChange, initialData }: ShortTermUserChargeAnalysisProps, ref): React.ReactElement => {
+  const {
+    categories,
+    metrics,
+    addCategory,
+    updateCategory,
+    deleteCategory,
+    toggleCategory,
+    setCategories,
+    totalEstimatedDailyFees,
+    totalActualDailyFees,
+    setTotalEstimatedDailyFees,
+    setTotalActualDailyFees
+  } = useShortTerm();
 
   const [showFormulas, setShowFormulas] = useState(false);
   const [showGapFormulas, setShowGapFormulas] = useState(false);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    const newInputs = {
-      ...inputs,
-      [name]: Number(value)
-    };
-    setInputs(newInputs);
-  };
+  const { selectedCountry } = useCurrency();
+  const currencySymbol = selectedCountry?.currency_symbol || 'KSh';
+  const currency = selectedCountry?.currency || 'KES';
+  const { data: session } = useSession();
+  const params = useParams();
+  const searchParams = useSearchParams();
+  
+  // Extract reportId from initialData, URL params, or search params
+  const reportIdFromInitialData = initialData?._id || initialData?.reportId;
+  const reportIdFromParams = params?.reportId as string;
+  const reportIdFromSearch = searchParams?.get('reportId');
+  
+  // Use the first available reportId
+  const reportId = reportIdFromInitialData || reportIdFromParams || reportIdFromSearch;
+  
+  console.log('ShortTermUserChargeAnalysis - Debug reportId sources:', {
+    fromInitialData: reportIdFromInitialData,
+    fromParams: reportIdFromParams,
+    fromSearch: reportIdFromSearch,
+    finalReportId: reportId,
+    initialDataExists: !!initialData,
+    initialDataKeys: initialData ? Object.keys(initialData) : [],
+    initialDataRaw: initialData,
+    initialDataId: initialData?._id,
+    initialDataReportId: initialData?.reportId
+  });
 
-  const handleCategoryInputChange = (categoryId: string, field: keyof CategoryData, value: number) => {
-    const newCategories = inputs.categories.map(cat => {
-      if (cat.id === categoryId) {
-        return { ...cat, [field]: value };
+  // Use our hook for database operations with reportId
+  const {
+    data: savedData,
+    loading: isLoading,
+    error,
+    isSaving,
+    loadData,
+    saveData
+  } = useShortTermData({ providedReportId: reportId });
+  
+  // Add a ref to store the previous data
+  const previousDataRef = useRef<any>(null);
+  
+  // Add a ref to track if data has been loaded
+  const dataLoadedRef = useRef<boolean>(false);
+
+  // Notify parent component of metrics changes only (no auto-save)
+  useEffect(() => {
+    // Create a complete data object that includes both metrics and raw data for saving
+    const completeData: ShortTermCompleteData = {
+      // Analysis metrics for display
+      metrics: {
+        totalEstimatedRevenue: Number(metrics.potential) || 0,
+        totalActualRevenue: Number(metrics.actual) || 0,
+        totalGap: Number(metrics.gap) || 0,
+        potentialLeveraged: Number(metrics.potentialLeveraged) || 0,
+        currencySymbol: currencySymbol || '$',
+        gapBreakdown: {
+          registrationGap: Number(metrics.gapBreakdown?.registrationGap) || 0,
+          registrationGapPercentage: Number(metrics.gapBreakdown?.registrationGapPercentage) || 0,
+          complianceGap: Number(metrics.gapBreakdown?.complianceGap) || 0,
+          complianceGapPercentage: Number(metrics.gapBreakdown?.complianceGapPercentage) || 0,
+          rateGap: Number(metrics.gapBreakdown?.rateGap) || 0,
+          rateGapPercentage: Number(metrics.gapBreakdown?.rateGapPercentage) || 0,
+          combinedGaps: Number(metrics.gapBreakdown?.combinedGaps) || 0,
+          combinedGapsPercentage: Number(metrics.gapBreakdown?.combinedGapsPercentage) || 0
+        },
+        totalEstimatedDailyFees: Number(totalEstimatedDailyFees) || 0,
+        totalActualDailyFees: Number(totalActualDailyFees) || 0
+      },
+      
+      // Raw data for saving to database
+      saveData: {
+        categories: categories.map(cat => ({
+          id: cat.id,
+          name: cat.name,
+          estimatedDailyFees: cat.estimatedDailyFees,
+          actualDailyFees: cat.actualDailyFees,
+          potentialRate: cat.potentialRate,
+          actualRate: cat.actualRate,
+          daysInYear: 365,
+          isExpanded: cat.isExpanded
+        })),
+        totalEstimatedDailyFees: Number(totalEstimatedDailyFees) || 0,
+        totalActualDailyFees: Number(totalActualDailyFees) || 0
       }
-      return cat;
-    });
-    const newInputs = { ...inputs, categories: newCategories };
-    setInputs(newInputs);
-  };
-
-  const handleCategoryNameChange = (categoryId: string, newName: string) => {
-    const newCategories = inputs.categories.map(cat => {
-      if (cat.id === categoryId) {
-        return { ...cat, name: newName };
-      }
-      return cat;
-    });
-    setInputs({ ...inputs, categories: newCategories });
-  };
-
-  const toggleCategory = (categoryId: string) => {
-    const newCategories = inputs.categories.map(cat => {
-      if (cat.id === categoryId) {
-        return { ...cat, isExpanded: !cat.isExpanded };
-      }
-      return cat;
-    });
-    setInputs({ ...inputs, categories: newCategories });
-  };
-
-  const addCategory = () => {
-    const newCategory: CategoryData = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: `Category ${inputs.categories.length + 1}`,
-      isExpanded: true,
-      estimatedDailyFees: 0,
-      actualDailyFees: 0,
-      potentialRate: 0,
-      actualRate: 0
     };
-    const newInputs = {
-      ...inputs,
-      categories: [...inputs.categories, newCategory]
-    };
-    setInputs(newInputs);
+    
+    // Check if the data has actually changed before notifying parent
+    if (JSON.stringify(completeData) !== JSON.stringify(previousDataRef.current)) {
+      console.log('ShortTermUserChargeAnalysis sending data to parent:', completeData);
+      
+      // Pass the complete data to the parent component
+      if (onDataChange) {
+        onDataChange(completeData);
+      }
+      
+      // Update the previous data reference
+      previousDataRef.current = completeData;
+    }
+  }, [metrics, categories, onDataChange, totalEstimatedDailyFees, totalActualDailyFees, currencySymbol, selectedCountry]);
+
+  // Update the clearAllCategories function
+  const clearAllCategories = () => {
+    // Instead of removing categories one by one, set an empty array directly
+    setCategories([]);
   };
 
-  // Calculate Actual Revenue = (B103*B109*365)+(B104*B110*365)+(B105*B111*365)
-  const actualRevenue = useMemo(() => {
-    return inputs.categories.reduce((total, category) => {
-      return total + (category.actualDailyFees * category.actualRate * 365);
-    }, 0);
-  }, [inputs.categories]);
+  // Modify the useEffect that loads data from savedData
+  useEffect(() => {
+    if (!isLoading && savedData && !dataLoadedRef.current) {
+      console.log('Loading short term data from savedData:', savedData);
+      
+      // Mark data as loaded to prevent infinite loops
+      dataLoadedRef.current = true;
+      
+      try {
+        // Clear existing categories before loading new ones
+        clearAllCategories();
+        
+        // Update metrics if they exist in savedData
+        if (savedData.metrics) {
+          // Use type assertion to avoid TypeScript errors
+          const metricsData = savedData.metrics as any;
+          
+          // No need to update metrics manually as they will be recalculated based on categories
+        }
+        
+        // Load categories from savedData
+        if (savedData.categories && Array.isArray(savedData.categories) && savedData.categories.length > 0) {
+          console.log('Loading categories from savedData:', savedData.categories);
+          
+          // Map the saved categories to the format expected by the component
+          const mappedCategories = savedData.categories.map((cat: any) => ({
+            id: cat.id || crypto.randomUUID(),
+            name: cat.name || 'Unnamed Category',
+            estimatedDailyFees: cat.estimatedDailyFees || 0,
+            actualDailyFees: cat.actualDailyFees || 0,
+            potentialRate: cat.potentialRate || 0,
+            actualRate: cat.actualRate || 0,
+            isExpanded: false
+          }));
+          
+          // Set all categories at once
+          setCategories(mappedCategories);
+        } else {
+          console.log('No categories found in savedData, using default categories');
+          
+          // Set default categories
+          const defaultCategories = [
+            {
+              id: crypto.randomUUID(),
+              name: 'Parking Fees',
+              estimatedDailyFees: 600,
+              actualDailyFees: 500,
+              potentialRate: 100,
+              actualRate: 10,
+              isExpanded: false
+            },
+            {
+              id: crypto.randomUUID(),
+              name: 'Market Fees',
+              estimatedDailyFees: 100,
+              actualDailyFees: 50,
+              potentialRate: 50,
+              actualRate: 5,
+              isExpanded: false
+            },
+            {
+              id: crypto.randomUUID(),
+              name: 'Bus Park Fees',
+              estimatedDailyFees: 300,
+              actualDailyFees: 150,
+              potentialRate: 150,
+              actualRate: 20,
+              isExpanded: false
+            }
+          ];
+          
+          setCategories(defaultCategories);
+        }
+      } catch (error) {
+        console.error('Error loading short term data:', error);
+        toast.error('Failed to load short term data');
+      }
+    }
+  }, [isLoading, savedData, clearAllCategories, setCategories]);
 
-  // Calculate Total Potential Revenue = (B100*B106*365)+(B101*B107*365)+(B102*B108*365)
-  const totalPotentialRevenue = useMemo(() => {
-    return inputs.categories.reduce((total, category) => {
-      return total + (category.estimatedDailyFees * category.potentialRate * 365);
-    }, 0);
-  }, [inputs.categories]);
+  // Update the useEffect that loads initialData
+  useEffect(() => {
+    if (initialData && !dataLoadedRef.current) {
+      console.log('Loading initial short term data:', initialData);
+      
+      // Mark data as loaded to prevent infinite loops
+      dataLoadedRef.current = true;
+      
+      try {
+        // Clear existing categories before loading new ones
+        clearAllCategories();
+        
+        // Check for saveData structure
+        if (initialData.saveData) {
+          // Update categories from saveData if available
+          if (initialData.saveData.categories && initialData.saveData.categories.length > 0) {
+            // Format categories to match the expected structure
+            const formattedCategories = initialData.saveData.categories.map((cat: any) => ({
+              id: cat.id || crypto.randomUUID(),
+              name: cat.name || 'Unnamed Category',
+              estimatedDailyFees: cat.estimatedDailyFees || 0,
+              actualDailyFees: cat.actualDailyFees || 0,
+              potentialRate: cat.potentialRate || 0,
+              actualRate: cat.actualRate || 0,
+              isExpanded: false
+            }));
+            
+            // Set all categories at once
+            setCategories(formattedCategories);
+            
+            return; // Skip the direct categories loading if we've loaded from saveData
+          }
+        }
+        
+        // Update categories if available directly (only if not already loaded from saveData)
+        if (initialData.categories && initialData.categories.length > 0) {
+          // Format categories to match the expected structure
+          const formattedCategories = initialData.categories.map((cat: any) => ({
+            id: cat.id || crypto.randomUUID(),
+            name: cat.name || 'Unnamed Category',
+            estimatedDailyFees: cat.estimatedDailyFees || 0,
+            actualDailyFees: cat.actualDailyFees || 0,
+            potentialRate: cat.potentialRate || 0,
+            actualRate: cat.actualRate || 0,
+            isExpanded: false
+          }));
+          
+          // Set all categories at once
+          setCategories(formattedCategories);
+        } else {
+          console.log('No categories found in initialData, using default categories');
+          
+          // Set default categories
+          const defaultCategories = [
+            {
+              id: crypto.randomUUID(),
+              name: 'Parking Fees',
+              estimatedDailyFees: 600,
+              actualDailyFees: 500,
+              potentialRate: 100,
+              actualRate: 10,
+              isExpanded: false
+            },
+            {
+              id: crypto.randomUUID(),
+              name: 'Market Fees',
+              estimatedDailyFees: 100,
+              actualDailyFees: 50,
+              potentialRate: 50,
+              actualRate: 5,
+              isExpanded: false
+            },
+            {
+              id: crypto.randomUUID(),
+              name: 'Bus Park Fees',
+              estimatedDailyFees: 300,
+              actualDailyFees: 150,
+              potentialRate: 150,
+              actualRate: 20,
+              isExpanded: false
+            }
+          ];
+          
+          setCategories(defaultCategories);
+        }
+      } catch (error) {
+        console.error('Error loading initial short term data:', error);
+      }
+    }
+  }, [initialData, clearAllCategories, setCategories]);
 
-  // Calculate Total Gap Short-term Fees = B113-B112
-  const totalGapShortTermFees = useMemo(() => {
-    return totalPotentialRevenue - actualRevenue;
-  }, [totalPotentialRevenue, actualRevenue]);
+  // Function to save data to the database
+  const handleSaveData = async (): Promise<boolean> => {
+    if (!session) {
+      toast.error('Please sign in to save data');
+      return false;
+    }
 
-  // Calculate % of Potential Leveraged = B112/B113
-  const percentagePotentialLeveraged = useMemo(() => {
-    return totalPotentialRevenue > 0 ? (actualRevenue / totalPotentialRevenue) * 100 : 0;
-  }, [actualRevenue, totalPotentialRevenue]);
+    if (!reportId) {
+      toast.error('Please save the main report first');
+      return false;
+    }
 
-  // Calculate Compliance Gap = ((B100-B103)*B109*365)+((B101-B104)*B110*365)+((B102-B105)*B111*365)
-  const complianceGap = useMemo(() => {
-    return inputs.categories.reduce((total, category) => {
-      const dailyFeeDiff = category.estimatedDailyFees - category.actualDailyFees;
-      return total + (dailyFeeDiff * category.actualRate * 365);
-    }, 0);
-  }, [inputs.categories]);
+    try {
+      console.log('=== START: handleSaveData ===');
+      console.log('ReportId:', reportId);
+      console.log('Session:', session?.user?.id);
+      console.log('Categories:', categories);
+      console.log('Metrics:', metrics);
 
-  // Calculate Rate Gap = ((B106-B109)*B103*365)+((B107-B110)*B104*365)+((B105-B108)*B111*365)
-  const rateGap = useMemo(() => {
-    let total = 0;
-    inputs.categories.forEach((category, index) => {
-      const rateDiff = category.potentialRate - category.actualRate;
-      const actualDailyFees = category.actualDailyFees;
-      total += rateDiff * actualDailyFees * 365;
-    });
-    return total;
-  }, [inputs.categories]);
-
-  // Calculate Combined gaps = B114-SUM(B117+B118)
-  const combinedGaps = useMemo(() => {
-    return totalGapShortTermFees - (complianceGap + rateGap);
-  }, [totalGapShortTermFees, complianceGap, rateGap]);
-
-  // Calculate individual category gaps
-  const categoryGaps = useMemo(() => {
-    return inputs.categories.map(category => {
-      const potentialRevenue = category.estimatedDailyFees * category.potentialRate * 365;
-      const actualRevenue = category.actualDailyFees * category.actualRate * 365;
-      return {
-        name: category.name,
-        value: potentialRevenue - actualRevenue
+      // Create a data object that matches the property tax structure
+      const dataToSave = {
+        metrics: {
+          actual: Number(metrics.actual) || 0,
+          potential: Number(metrics.potential) || 0,
+          gap: Number(metrics.gap) || 0,
+          potentialLeveraged: Number(metrics.potentialLeveraged) || 0,
+          gapBreakdown: {
+            registrationGap: Number(metrics.gapBreakdown?.registrationGap) || 0,
+            registrationGapPercentage: Number(metrics.gapBreakdown?.registrationGapPercentage) || 0,
+            complianceGap: Number(metrics.gapBreakdown?.complianceGap) || 0,
+            complianceGapPercentage: Number(metrics.gapBreakdown?.complianceGapPercentage) || 0,
+            rateGap: Number(metrics.gapBreakdown?.rateGap) || 0,
+            rateGapPercentage: Number(metrics.gapBreakdown?.rateGapPercentage) || 0,
+            combinedGaps: Number(metrics.gapBreakdown?.combinedGaps) || 0,
+            combinedGapsPercentage: Number(metrics.gapBreakdown?.combinedGapsPercentage) || 0
+          },
+          totalEstimatedDailyFees: Number(totalEstimatedDailyFees) || 0,
+          totalActualDailyFees: Number(totalActualDailyFees) || 0
+        },
+        categories: categories.map(cat => ({
+          id: cat.id,
+          name: cat.name,
+          estimatedDailyFees: Number(cat.estimatedDailyFees) || 0,
+          actualDailyFees: Number(cat.actualDailyFees) || 0,
+          potentialRate: Number(cat.potentialRate) || 0,
+          actualRate: Number(cat.actualRate) || 0,
+          daysInYear: 365
+        }))
       };
-    });
-  }, [inputs.categories]);
 
-  // Calculate Gap Category A, B, C
-  const gapCategoryA = useMemo(() => categoryGaps[0]?.value || 0, [categoryGaps]);
-  const gapCategoryB = useMemo(() => categoryGaps[1]?.value || 0, [categoryGaps]);
-  const gapCategoryC = useMemo(() => categoryGaps[2]?.value || 0, [categoryGaps]);
+      console.log('Data to save:', JSON.stringify(dataToSave, null, 2));
 
-  // Calculate Largest Gap (equivalent to VLOOKUP with LARGE)
-  const largestGap = useMemo(() => {
-    const gaps = [
-      { name: 'Compliance Gap', value: complianceGap },
-      { name: 'Rate Gap', value: rateGap },
-      { name: 'Combined gaps', value: combinedGaps }
-    ];
-    return gaps.reduce((max, gap) => gap.value > max.value ? gap : max, gaps[0]);
-  }, [complianceGap, rateGap, combinedGaps]);
+      // Save to database
+      console.log('Calling saveData...');
+      const result = await saveData(dataToSave);
+      console.log('Save result:', result);
+      
+      if (result) {
+        console.log('Save successful, result:', result);
+        toast.success('Short term data saved successfully');
+        
+        // Reset the data loaded flag to force a reload on next load
+        dataLoadedRef.current = false;
+        
+        // Refresh the data to ensure we have the latest
+        console.log('Reloading data...');
+        await loadData();
+        
+        // Update the parent component with the latest data
+        if (onDataChange) {
+          const completeData = {
+            metrics: dataToSave.metrics,
+            categories: dataToSave.categories
+          };
+          console.log('Updating parent with latest data:', completeData);
+          onDataChange(completeData);
+        }
+        
+        console.log('=== END: handleSaveData - Success ===');
+        return true;
+      } else {
+        console.warn('Save function returned falsy result:', result);
+        toast.error('Failed to save data');
+        console.log('=== END: handleSaveData - Failed ===');
+        return false;
+      }
+      
+    } catch (error) {
+      console.error('Error saving short term data:', error);
+      toast.error('Failed to save short term data');
+      console.log('=== END: handleSaveData - Error ===');
+      return false;
+    }
+  };
+
+  // Function to handle category deletion and save changes
+  const handleDeleteCategory = async (id: string) => {
+    try {
+      // Delete the category from the context state
+      deleteCategory(id);
+      
+      if (!reportId) {
+        // If there's no reportId, we're working with local storage only
+        toast.success('Category deleted');
+        return;
+      }
+      
+      // Save the changes to the database
+      const saveResult = await handleSaveData();
+      
+      if (saveResult) {
+        // Show success message
+        toast.success('Category deleted and changes saved');
+        
+        // Refresh data to ensure UI is in sync with database
+        dataLoadedRef.current = false;
+        await loadData();
+      } else {
+        // If save failed but didn't throw an error
+        toast.error('Category deleted but changes could not be saved');
+      }
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      toast.error('Failed to save changes after deleting category');
+      
+      // Refresh data to ensure UI is in sync with database
+      loadData();
+    }
+  };
+
+  const formatLargeNumber = (value: number): string => {
+    const isNegative = value < 0;
+    const absValue = Math.abs(value);
+    
+    let formattedNumber: string;
+    if (absValue >= 1000000000) {
+      formattedNumber = `${(absValue / 1000000000).toFixed(1)}B`;
+    } else if (absValue >= 1000000) {
+      formattedNumber = `${(absValue / 1000000).toFixed(1)}M`;
+    } else if (absValue >= 1000) {
+      formattedNumber = `${(absValue / 1000).toFixed(1)}K`;
+    } else {
+      formattedNumber = absValue.toString();
+    }
+
+    return isNegative ? `-${formattedNumber}` : formattedNumber;
+  };
+
+  const formatCurrency = (value: number): string => {
+    return `${currencySymbol} ${formatLargeNumber(value)}`;
+  };
+
+  const chartData = {
+    labels: categories.map(cat => cat.name),
+    datasets: [
+      {
+        label: 'Actual Revenue',
+        data: categories.map(cat => cat.actualDailyFees * cat.actualRate * 365),
+        backgroundColor: 'rgba(75, 192, 192, 0.5)',
+        borderColor: 'rgb(75, 192, 192)',
+        borderWidth: 1,
+      },
+      {
+        label: 'Potential Revenue',
+        data: categories.map(cat => cat.estimatedDailyFees * cat.potentialRate * 365),
+        backgroundColor: 'rgba(255, 159, 64, 0.5)',
+        borderColor: 'rgb(255, 159, 64)',
+        borderWidth: 1,
+      },
+    ],
+  };
 
   const chartOptions = {
     responsive: true,
-    maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'bottom' as const,
-        align: 'center' as const,
-        labels: {
-          boxWidth: 12,
-          boxHeight: 12,
-          padding: 15,
-          color: 'rgb(100, 116, 139)', // slate-500
-          font: {
-            size: 11
-          },
-          usePointStyle: true,
-          pointStyle: 'circle'
-        }
+        position: 'top' as const,
       },
-      tooltip: {
-        enabled: true,
-        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-        titleColor: 'rgb(15, 23, 42)', // slate-900
-        bodyColor: 'rgb(15, 23, 42)', // slate-900
-        padding: 12,
-        cornerRadius: 4,
-        boxPadding: 4,
-        bodyFont: {
-          size: 12
-        },
-        borderColor: 'rgb(226, 232, 240)', // slate-200
-        borderWidth: 1,
-        displayColors: true,
-        callbacks: {
-          label: function(context) {
-            let label = context.dataset.label || '';
-            if (label) {
-              label += ': ';
-            }
-            if (context.parsed.y !== null) {
-              label += context.parsed.y.toLocaleString();
-            }
-            return label;
-          },
-          labelTextColor: function() {
-            return 'rgb(15, 23, 42)'; // slate-900
-          }
-        }
-      }
+      title: {
+        display: true,
+        text: 'Revenue by Category',
+      },
     },
     scales: {
-      x: {
-        stacked: true,
-        grid: {
-          display: false
-        },
-        border: {
-          display: true,
-          color: 'rgb(203, 213, 225)' // slate-300
-        },
-        ticks: {
-          display: false
-        }
-      },
       y: {
-        stacked: true,
         beginAtZero: true,
-        border: {
+        title: {
           display: true,
-          color: 'rgb(203, 213, 225)' // slate-300
+          text: `Amount (${currency})`,
         },
-        grid: {
-          display: true,
-          color: 'rgb(241, 245, 249)', // slate-100
-          drawBorder: false
-        },
-        ticks: {
-          padding: 12,
-          callback: function(value) {
-            return value.toLocaleString();
-          },
-          color: 'rgb(100, 116, 139)', // slate-500
-          font: {
-            size: 11
-          },
-          maxTicksLimit: 6
-        }
-      }
-    }
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'KES',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
-
-  const getGapAnalysisMessage = (percentage: number) => {
-    if (percentage < 30) {
-      return (
-        <span>
-          The Short-term User Charge Revenue Collection (GOA) faces a <span className="font-bold">significant challenge</span> as the percentage of potential leveraged revenue falls <span className="font-bold">below 30%</span> at the value <span className="font-bold">{percentage.toFixed(2)}%</span>. This indicates a <span className="font-bold">substantial gap</span> between the revenue collected and the total estimated potential revenue. To close the gap, a <span className="font-bold">comprehensive analysis</span> of existing revenue channels, revisions of pricing structures may be required.
-        </span>
-      );
-    } else if (percentage >= 30 && percentage < 70) {
-      return (
-        <span>
-          The Short-term User Charge Revenue Collection (GOA) shows <span className="font-bold">moderate performance</span> with <span className="font-bold">{percentage.toFixed(2)}%</span> of potential revenue being leveraged. While this indicates <span className="font-bold">some success</span> in revenue collection, there remains <span className="font-bold">room for improvement</span>. Strategic initiatives to optimize revenue collection processes could help bridge the remaining gap.
-        </span>
-      );
-    } else {
-      return (
-        <span>
-          The Short-term User Charge Revenue Collection (GOA) demonstrates <span className="font-bold">strong performance</span> with <span className="font-bold">{percentage.toFixed(2)}%</span> of potential revenue being leveraged. This <span className="font-bold">high percentage</span> indicates effective revenue collection practices. Maintaining current strategies while monitoring for optimization opportunities is recommended.
-        </span>
-      );
-    }
-  };
-
-  const getBreakdownAnalysisMessage = () => {
-    const complianceGapValue = complianceGap;
-    const rateGapValue = rateGap;
-    const combinedGapsValue = combinedGaps;
-
-    const gaps = [
-      { type: 'Compliance Gap', value: complianceGapValue },
-      { type: 'Rate Gap', value: rateGapValue },
-      { type: 'Combined Gaps', value: combinedGapsValue }
-    ];
-
-    const largestGap = gaps.reduce((max, gap) => gap.value > max.value ? gap : max, gaps[0]);
-
-    if (largestGap.value <= 0) {
-      return (
-        <span>
-          The gaps in short-term user charge revenue collection are <span className="font-bold">relatively balanced</span>, with no single gap type significantly outweighing the others. This suggests a need for a <span className="font-bold">comprehensive approach</span> to address all aspects of revenue collection equally.
-        </span>
-      );
-    }
-
-    switch (largestGap.type) {
-      case 'Compliance Gap':
-        return (
-          <span>
-            <span className="font-bold">Compliance gap</span> is identified as the largest gap contributing to the total gap in short-term user charge revenue collection, at <span className="font-bold">{formatCurrency(complianceGapValue)}</span>. This indicates a <span className="font-bold">significant discrepancy</span> between the number of potential users and actual users paying the charges.
-          </span>
-        );
-      case 'Rate Gap':
-        return (
-          <span>
-            <span className="font-bold">Rate gap</span> is identified as the largest gap contributing to the total gap in short-term user charge revenue collection, at <span className="font-bold">{formatCurrency(rateGapValue)}</span>. This suggests that the <span className="font-bold">current rates</span> being charged may need to be reviewed and adjusted to better align with market values or service costs.
-          </span>
-        );
-      case 'Combined Gaps':
-        return (
-          <span>
-            <span className="font-bold">Combined gaps</span> represent the largest portion of revenue loss in short-term user charge collection, at <span className="font-bold">{formatCurrency(combinedGapsValue)}</span>. This indicates <span className="font-bold">multiple factors</span> contributing to the revenue gap that require a comprehensive approach to address.
-          </span>
-        );
-      default:
-        return null;
-    }
-  };
-
-  const sampleData = {
-    categories: [
-      {
-        name: 'Parking Fees',
-        estimatedDailyUsers: 2000,
-        standardRate: 100,
-        registeredDailyUsers: 1500,
-        averagePaidRate: 80
       },
-      {
-        name: 'Market Entry Fees',
-        estimatedDailyUsers: 1000,
-        standardRate: 50,
-        registeredDailyUsers: 800,
-        averagePaidRate: 40
-      }
-    ]
+    },
   };
 
-  const [metrics, setMetrics] = useState(sampleData);
+  // Log metrics for debugging
+  console.log('ShortTermUserChargeAnalysis metrics:', {
+    metrics,
+    actualRevenue: metrics.actual,
+    totalGapShortTermFees: metrics.gap,
+    complianceGap: metrics.gapBreakdown.complianceGap,
+    rateGap: metrics.gapBreakdown.rateGap,
+    combinedGaps: metrics.gapBreakdown.combinedGaps,
+    totalPotentialRevenue: metrics.potential
+  });
 
-  useEffect(() => {
-    const potential = calculateTotalPotentialRevenue(metrics);
-    const actual = calculateActualRevenue({
-      categories: metrics.categories.map(category => ({
-        actualDailyFees: category.registeredDailyUsers,
-        actualRate: category.averagePaidRate
-      }))
-    });
-    const gap = calculateTotalGap(metrics);
-    
-    console.log({
-      potential,
-      actual,
-      gap
-    });
-  }, [metrics]);
+  const actualRevenue = metrics.actual;
+  const totalGapShortTermFees = metrics.gap;
+  const complianceGap = metrics.gapBreakdown.complianceGap;
+  const rateGap = metrics.gapBreakdown.rateGap;
+  const combinedGaps = metrics.gapBreakdown.combinedGaps;
+  const totalPotentialRevenue = metrics.potential;
 
-  useEffect(() => {
-    if (onMetricsChange) {
-      const actualRevenue = calculateActualRevenue({
-        categories: inputs.categories.map(category => ({
-          actualDailyFees: category.actualDailyFees,
-          actualRate: category.actualRate
-        }))
-      });
-      const potentialRevenue = calculateTotalPotentialRevenueOld(inputs);
-      const gap = potentialRevenue - actualRevenue;
-      
-      onMetricsChange({
-        actual: actualRevenue,
-        potential: potentialRevenue,
-        gap: gap
-      });
+  // Expose the handleSaveData function to the parent component
+  useImperativeHandle(ref, () => ({
+    saveData: handleSaveData,
+    getCurrentData: () => {
+      // Return the current data in the same format as completeData
+      return {
+        metrics: {
+          actual: metrics.actual,
+          potential: metrics.potential,
+          gap: metrics.gap,
+          potentialLeveraged: metrics.potentialLeveraged,
+          gapBreakdown: metrics.gapBreakdown,
+          totalEstimatedDailyFees: metrics.totalEstimatedDailyFees,
+          totalActualDailyFees: metrics.totalActualDailyFees
+        },
+        saveData: {
+          categories: categories.map(cat => ({
+            id: cat.id,
+            name: cat.name,
+            estimatedDailyFees: cat.estimatedDailyFees,
+            actualDailyFees: cat.actualDailyFees,
+            potentialRate: cat.potentialRate,
+            actualRate: cat.actualRate,
+            daysInYear: 365,
+            isExpanded: false
+          })),
+          totalEstimatedDailyFees: Number(totalEstimatedDailyFees) || 0,
+          totalActualDailyFees: Number(totalActualDailyFees) || 0
+        }
+      };
     }
-  }, [inputs, onMetricsChange]);
+  }));
+
+  // Initialize data and send to parent on component mount and when data changes
+  useEffect(() => {
+    console.log('Initializing data with:', {
+      initialData,
+      savedData,
+      reportId
+    });
+    console.log('Categories in ShortTermUserChargeAnalysis:', categories);
+    
+    // Create a default data structure to ensure parent always has data
+    const defaultData = {
+      // This matches exactly how propertyTax data is structured
+      categories: categories.map(cat => ({
+        id: cat.id,
+        name: cat.name,
+        estimatedDailyFees: Number(cat.estimatedDailyFees) || 0,
+        actualDailyFees: Number(cat.actualDailyFees) || 0,
+        potentialRate: Number(cat.potentialRate) || 0,
+        actualRate: Number(cat.actualRate) || 0,
+        daysInYear: 365,
+        isExpanded: cat.isExpanded || false
+      })),
+      totalEstimatedDailyFees: Number(totalEstimatedDailyFees) || 0,
+      totalActualDailyFees: Number(totalActualDailyFees) || 0,
+      country: selectedCountry?.name || 'Not specified',
+      state: 'Not specified',
+      metrics: {
+        totalEstimatedRevenue: calculateTotalEstimatedRevenue(),
+        totalActualRevenue: calculateTotalActualRevenue(),
+        totalGap: calculateTotalEstimatedRevenue() - calculateTotalActualRevenue(),
+        potentialLeveraged: calculateTotalActualRevenue() / (calculateTotalEstimatedRevenue() || 1) * 100,
+        currencySymbol: currencySymbol,
+        gapBreakdown: {
+          registrationGap: Number(metrics.gapBreakdown?.registrationGap) || 0,
+          registrationGapPercentage: Number(metrics.gapBreakdown?.registrationGapPercentage) || 0,
+          complianceGap: Number(metrics.gapBreakdown?.complianceGap) || 0,
+          complianceGapPercentage: Number(metrics.gapBreakdown?.complianceGapPercentage) || 0,
+          rateGap: Number(metrics.gapBreakdown?.rateGap) || 0,
+          rateGapPercentage: Number(metrics.gapBreakdown?.rateGapPercentage) || 0,
+          combinedGaps: Number(metrics.gapBreakdown?.combinedGaps) || 0,
+          combinedGapsPercentage: Number(metrics.gapBreakdown?.combinedGapsPercentage) || 0
+        },
+        totalEstimatedDailyFees: Number(totalEstimatedDailyFees) || 0,
+        totalActualDailyFees: Number(totalActualDailyFees) || 0
+      }
+    };
+    
+    console.log('Initialized data in ShortTermUserChargeAnalysis:', defaultData);
+    
+    // Send the data to the parent component
+    if (onDataChange) {
+      console.log('Sending data to parent from ShortTermUserChargeAnalysis');
+      onDataChange(defaultData);
+    }
+  }, [categories, totalEstimatedDailyFees, totalActualDailyFees, currencySymbol, selectedCountry, onDataChange, metrics]);
+
+  // Helper functions to calculate totals
+  const calculateTotalEstimatedRevenue = () => {
+    return categories.reduce((total, category) => {
+      return total + (category.estimatedDailyFees * 365);
+    }, 0);
+  };
+  
+  const calculateTotalActualRevenue = () => {
+    return categories.reduce((total, category) => {
+      return total + (category.actualDailyFees * 365);
+    }, 0);
+  };
 
   return (
-    <div className="flex">
-      {/* Left side - Input Form */}
-      <div className="w-1/3">
-        <div className="p-6">
-          <div className="mb-6">
-            
+    <div className="mb-6">
+      <div className="flex flex-col lg:flex-row gap-4">
+        <div className="md:w-1/3 space-y-4">
+          <div className="bg-white dark:bg-white/5 shadow-lg dark:backdrop-blur-lg rounded-2xl border border-gray-200 dark:border-white/10 p-6">
+            {/* Main Inputs */}
+            <MainInputs 
+              estimatedDailyFees={totalEstimatedDailyFees}
+              actualDailyFees={totalActualDailyFees}
+              onChange={(field, value) => {
+                if (field === 'estimatedDailyFees') {
+                  setTotalEstimatedDailyFees(value);
+                } else {
+                  setTotalActualDailyFees(value);
+                }
+                
+                // Update all categories proportionally
+                const ratio = value / (field === 'estimatedDailyFees' 
+                  ? totalEstimatedDailyFees || 1
+                  : totalActualDailyFees || 1);
+                
+                categories.forEach(cat => {
+                  updateCategory(cat.id, field as keyof ShortTermCategory, 
+                    field === 'estimatedDailyFees' 
+                      ? cat.estimatedDailyFees * ratio
+                      : cat.actualDailyFees * ratio
+                  );
+                });
+              }}
+            />
+
+            {/* Categories Section */}
+            <CategorySection
+              categories={categories}
+              addCategory={addCategory}
+              handleCategoryNameChange={(id, value) => updateCategory(id, 'name', value)}
+              handleCategoryInputChange={(id, field, value) => updateCategory(id, field as keyof ShortTermCategory, value)}
+              toggleCategory={toggleCategory}
+              deleteCategory={(index) => {
+                const categoryId = categories[index].id;
+                handleDeleteCategory(categoryId);
+              }}
+            />
           </div>
+        </div>
 
-          {/* Main Inputs */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-6">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Estimated Number of Daily Fees
-                </label>
-                <input
-                  type="number"
-                  name="estimatedDailyFees"
-                  value={inputs.estimatedDailyFees}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Actual Number of Daily Fees
-                </label>
-                <input
-                  type="number"
-                  name="actualDailyFees"
-                  value={inputs.actualDailyFees}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md"
-                />
-              </div>
-            </div>
-          </div>
+        <div className="md:w-2/3 space-y-4">
+          <div className="bg-white dark:bg-white/5 shadow-lg dark:backdrop-blur-lg rounded-2xl border border-gray-200 dark:border-white/10 p-6">
+            {/* Revenue Analysis Chart */}
+            <RevenueAnalysisChart
+              actualRevenue={actualRevenue}
+              totalGapShortTermFees={totalGapShortTermFees}
+              totalPotentialRevenue={totalPotentialRevenue}
+              percentage={metrics.gapBreakdown.registrationGapPercentage}
+              chartOptions={chartOptions}
+              showFormulas={showFormulas}
+              setShowFormulas={setShowFormulas}
+              formatCurrency={formatCurrency}
+            />
 
-          {/* Categories Section */}
-          <div className="mt-6">
-            <div className="flex justify-between items-center mb-6">
-              <h5 className="text-base font-medium">Categories</h5>
-              <button
-                onClick={addCategory}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-              >
-                <span className="text-lg mr-2">+</span>
-                Add Category
-              </button>
-            </div>
+            {/* Revenue Summary Cards */}
+            <RevenueSummaryCards
+              actualRevenue={actualRevenue}
+              totalPotentialRevenue={totalPotentialRevenue}
+              totalGapShortTermFees={totalGapShortTermFees}
+              formatCurrency={formatCurrency}
+            />
 
-            <div className="space-y-4">
-              {inputs.categories.map((category) => (
-                <div key={category.id} className="bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-white/10">
-                  <div className="flex items-center justify-between p-3">
-                    <div className="flex-1 flex items-center">
-                      <input
-                        type="text"
-                        value={category.name}
-                        onChange={(e) => handleCategoryNameChange(category.id, e.target.value)}
-                        className="text-sm font-medium text-gray-900 dark:text-white bg-transparent border-none focus:ring-0 focus:outline-none w-full"
-                      />
-                      <button
-                        onClick={() => toggleCategory(category.id)}
-                        className="ml-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
-                      >
-                        <svg 
-                          className={`w-4 h-4 transition-transform ${category.isExpanded ? 'rotate-180' : ''}`}
-                          fill="none" 
-                          viewBox="0 0 24 24" 
-                          stroke="currentColor"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-
-                  {category.isExpanded && (
-                    <div className="px-6 pb-4 space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          Estimated Number of Daily Fees
-                        </label>
-                        <input
-                          type="number"
-                          value={category.estimatedDailyFees}
-                          onChange={(e) => handleCategoryInputChange(category.id, 'estimatedDailyFees', Number(e.target.value))}
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          Actual Number of Daily Fees
-                        </label>
-                        <input
-                          type="number"
-                          value={category.actualDailyFees}
-                          onChange={(e) => handleCategoryInputChange(category.id, 'actualDailyFees', Number(e.target.value))}
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          Potential Rate payable by Leasees
-                        </label>
-                        <input
-                          type="number"
-                          value={category.potentialRate}
-                          onChange={(e) => handleCategoryInputChange(category.id, 'potentialRate', Number(e.target.value))}
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          Actual Rate paid by Leasees
-                        </label>
-                        <input
-                          type="number"
-                          value={category.actualRate}
-                          onChange={(e) => handleCategoryInputChange(category.id, 'actualRate', Number(e.target.value))}
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+            {/* Gap Analysis Chart */}
+            <GapAnalysisChart
+              complianceGap={complianceGap}
+              rateGap={rateGap}
+              combinedGaps={combinedGaps}
+              actualRevenue={actualRevenue}
+              totalPotentialRevenue={totalPotentialRevenue}
+              totalGapShortTermFees={totalGapShortTermFees}
+              percentage={metrics.gapBreakdown.registrationGapPercentage}
+              chartOptions={chartOptions}
+              showGapFormulas={showGapFormulas}
+              setShowGapFormulas={setShowGapFormulas}
+              formatCurrency={formatCurrency}
+            />
           </div>
         </div>
       </div>
-
-      {/* Right side - Charts and Analysis */}
-      <div className="w-2/3 p-6 space-y-6">
-        {/* Revenue Analysis Chart */}
-        <div>
-          <h4 className="text-sm font-medium text-blue-500 text-center mb-6">Short-term User Charge Gap Analysis</h4>
-          <div className="h-96">
-            <Bar
-              data={{
-                labels: [''],
-                datasets: [
-                  {
-                    label: 'Actual Revenue',
-                    data: [actualRevenue],
-                    backgroundColor: 'rgb(59, 130, 246)', // blue-500
-                    borderColor: 'rgb(59, 130, 246)',
-                    borderWidth: 0,
-                  },
-                  {
-                    label: 'Total Gap Short-term Fees',
-                    data: [totalGapShortTermFees],
-                    backgroundColor: 'rgb(249, 115, 22)', // orange-500
-                    borderColor: 'rgb(249, 115, 22)',
-                    borderWidth: 0,
-                  }
-                ],
-              }}
-              options={chartOptions}
-            />
-          </div>
-        </div>
-
-        {/* Short Term User Charge Revenue Analysis Formulas */}
-        <div className="mb-6 cursor-pointer">
-          <div className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center">
-              <DocumentTextIcon className="w-5 h-5 text-gray-500 mr-2" />
-              <h3 className="text-sm font-medium text-gray-900">Short Term User Charge Revenue Analysis Formulas</h3>
-            </div>
-            <ChevronDownIcon
-              className={`w-5 h-5 text-gray-500 transition-transform duration-200 ${
-                showFormulas ? 'transform rotate-180' : ''
-              }`}
-              onClick={() => setShowFormulas(!showFormulas)}
-            />
-          </div>
-
-          {showFormulas && (
-            <div className="px-4 py-3 text-sm text-gray-600 border-t space-y-6">
-              <div>
-                <h5 className="font-semibold text-gray-900 mb-2">Actual Revenue</h5>
-                <div className="pl-4 font-mono text-sm">
-                  = <span className="text-blue-600">Actual Daily Fees</span> × <span className="text-blue-600">Actual Rate</span> × 365
-                </div>
-              </div>
-
-              <div>
-                <h5 className="font-semibold text-gray-900 mb-2">Total Potential Revenue</h5>
-                <div className="pl-4 font-mono text-sm">
-                  = <span className="text-emerald-600">Estimated Daily Fees</span> × <span className="text-emerald-600">Potential Rate</span> × 365
-                </div>
-              </div>
-
-              <div>
-                <h5 className="font-semibold text-gray-900 mb-2">Total Gap Short-term Fees</h5>
-                <div className="pl-4 font-mono text-sm">
-                  = <span className="text-purple-600">Total Potential Revenue</span> - <span className="text-red-600">Actual Revenue</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Gap Analysis Message */}
-        <div className="mt-4">
-          <h4 className="text-base font-medium text-gray-900 mb-3">Short Term User Charge Gap Analysis</h4>
-          <div className="bg-blue-50 border border-blue-100 rounded-md p-4 mb-6">
-            {getGapAnalysisMessage(percentagePotentialLeveraged)}
-          </div>
-        </div>
-
-       
-
-        {/* Revenue Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="bg-white rounded-md shadow-sm p-4 border-l-4 border-blue-500">
-            <div className="text-sm text-gray-500 mb-1">Actual Revenue</div>
-            <div className="text-xl font-semibold text-gray-900 mb-1 truncate">
-              {formatCurrency(actualRevenue)}
-            </div>
-            <div className="text-sm text-blue-600">
-              Current collected revenue
-            </div>
-          </div>
-
-          <div className="bg-white rounded-md shadow-sm p-4 border-l-4 border-emerald-500">
-            <div className="text-sm text-gray-500 mb-1">Total Potential Revenue</div>
-            <div className="text-xl font-semibold text-gray-900 mb-1 truncate">
-              {formatCurrency(totalPotentialRevenue)}
-            </div>
-            <div className="text-sm text-emerald-600">
-              Maximum possible revenue
-            </div>
-          </div>
-
-          <div className="bg-white rounded-md shadow-sm p-4 border-l-4 border-red-500">
-            <div className="text-sm text-gray-500 mb-1">Total Gap</div>
-            <div className="text-xl font-semibold text-gray-900 mb-1 truncate">
-              {formatCurrency(totalGapShortTermFees)}
-            </div>
-            <div className="text-sm text-red-600">
-              Revenue improvement potential
-            </div>
-          </div>
-        </div>
-
-        {/* Gap Analysis Chart */}
-        <div>
-          <h4 className="text-sm font-medium text-blue-500 text-center mb-6">Short-term User Charge Breakdown Analysis</h4>
-          <div className="h-96">
-            <Bar
-              data={{
-                labels: [''],
-                datasets: [
-                  {
-                    label: 'Compliance Gap',
-                    data: [complianceGap],
-                    backgroundColor: 'rgb(59, 130, 246)', // blue-500
-                    borderColor: 'rgb(59, 130, 246)',
-                    borderWidth: 0,
-                  },
-                  {
-                    label: 'Rate Gap',
-                    data: [rateGap],
-                    backgroundColor: 'rgb(249, 115, 22)', // orange-500
-                    borderColor: 'rgb(249, 115, 22)',
-                    borderWidth: 0,
-                  },
-                  {
-                    label: 'Combined gaps',
-                    data: [combinedGaps],
-                    backgroundColor: 'rgb(156, 163, 175)', // gray-400
-                    borderColor: 'rgb(156, 163, 175)',
-                    borderWidth: 0,
-                  }
-                ],
-              }}
-              options={chartOptions}
-            />
-          </div>
-
-          {/* Gap Analysis Formulas */}
-          <div className="mb-6 cursor-pointer">
-            <div className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center">
-                <DocumentTextIcon className="w-5 h-5 text-gray-500 mr-2" />
-                <h3 className="text-sm font-medium text-gray-900">Short Term User Charge Gap Analysis Formulas</h3>
-              </div>
-              <ChevronDownIcon
-                className={`w-5 h-5 text-gray-500 transition-transform duration-200 ${
-                  showGapFormulas ? 'transform rotate-180' : ''
-                }`}
-                onClick={() => setShowGapFormulas(!showGapFormulas)}
-              />
-            </div>
-
-            {showGapFormulas && (
-              <div className="px-4 py-3 text-sm text-gray-600 border-t space-y-6">
-                <div>
-                  <h5 className="font-semibold text-gray-900 mb-2">Registration Gap</h5>
-                  <div className="pl-4 font-mono text-sm">
-                    = (<span className="text-emerald-600">Est. Daily Users</span> - <span className="text-emerald-600">Actual Daily Users</span>) × <span className="text-blue-600">Actual Daily Fee</span> × 365
-                  </div>
-                </div>
-
-                <div>
-                  <h5 className="font-semibold text-gray-900 mb-2">Rate Gap</h5>
-                  <div className="pl-4 font-mono text-sm">
-                    = (<span className="text-blue-600">Avg Daily Fee</span> - <span className="text-blue-600">Actual Daily Fee</span>) × <span className="text-emerald-600">Actual Daily Users</span> × 365
-                  </div>
-                </div>
-
-                <div>
-                  <h5 className="font-semibold text-gray-900 mb-2">Combined Gaps</h5>
-                  <div className="pl-4 font-mono text-sm">
-                    = <span className="text-purple-600">Total Gap Short-term Fees</span> - (<span className="text-red-600">Registration Gap</span> + <span className="text-red-600">Rate Gap</span>)
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
- {/* Breakdown Analysis */}
- <div className="mt-4">
-          <h4 className="text-base font-medium text-gray-900 mb-3">Short-term User Charge Breakdown Analysis</h4>
-          <div className="bg-blue-50 border border-blue-100 rounded-md p-4 mb-6">
-            <div className="text-sm text-gray-600 leading-relaxed">
-              {getBreakdownAnalysisMessage()}
-            </div>
-          </div>
-        </div>
-
-          {/* Gap Type Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              <div className="bg-white rounded-md shadow-sm p-4 border-l-4 border-orange-500">
-                <div className="text-sm text-gray-500 mb-1">Compliance Gap</div>
-                <div className="text-xl font-semibold text-gray-900 mb-1 truncate">
-                  {formatCurrency(complianceGap)}
-                </div>
-                <div className="text-sm text-orange-600">
-                  Non-compliant revenue loss
-                </div>
-              </div>
-
-              <div className="bg-white rounded-md shadow-sm p-4 border-l-4 border-purple-500">
-                <div className="text-sm text-gray-500 mb-1">Rate Gap</div>
-                <div className="text-xl font-semibold text-gray-900 mb-1 truncate">
-                  {formatCurrency(rateGap)}
-                </div>
-                <div className="text-sm text-purple-600">
-                  Rate difference impact
-                </div>
-              </div>
-
-              <div className="bg-white rounded-md shadow-sm p-4 border-l-4 border-yellow-500">
-                <div className="text-sm text-gray-500 mb-1">Combined Gaps</div>
-                <div className="text-xl font-semibold text-gray-900 mb-1 truncate">
-                  {formatCurrency(combinedGaps)}
-                </div>
-                <div className="text-sm text-yellow-600">
-                  Other revenue gaps
-                </div>
-              </div>
-            </div>
-        </div>
-      </div>
+      
+      {/* Tooltips */}
+      <ReactTooltip
+        id="revenue-tooltip"
+        place="top"
+        className="max-w-xs text-sm bg-gray-900"
+      />
+      <ReactTooltip
+        id="gap-tooltip"
+        place="top"
+        className="max-w-xs text-sm bg-gray-900"
+      />
     </div>
   );
-}
+});
+
+export default ShortTermUserChargeAnalysis;
