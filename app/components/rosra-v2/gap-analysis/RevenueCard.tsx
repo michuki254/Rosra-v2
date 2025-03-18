@@ -5,26 +5,30 @@ import React from 'react';
 interface RevenueCardProps {
   title: string;
   amount: number;
-  currencySymbol?: string;
+  description?: string;
   className?: string;
+  isPercentage?: boolean;
 }
 
-export default function RevenueCard({ title, amount, currencySymbol = 'KES', className = '' }: RevenueCardProps) {
-  const formattedAmount = amount.toLocaleString();
+export default function RevenueCard({ title, amount, description, className = '', isPercentage = false }: RevenueCardProps) {
+  const formatCurrency = (amount: number) => {
+    const formattedAmount = amount.toLocaleString();
+    return formattedAmount;
+  };
 
   return (
-    <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 ${className}`}>
-      <h3 className="text-lg text-gray-700 dark:text-gray-300 font-medium mb-4">
+    <div className={`p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm ${className}`}>
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
         {title}
       </h3>
-      <div className="flex items-baseline">
-        <span className="text-2xl text-blue-600 dark:text-blue-400 font-semibold mr-2">
-          {currencySymbol}
-        </span>
-        <span className="text-4xl text-gray-900 dark:text-white font-bold">
-          {formattedAmount}
-        </span>
-      </div>
+      <p className="text-3xl font-bold text-gray-900 dark:text-white">
+        {isPercentage ? `${amount.toFixed(1)}%` : formatCurrency(amount)}
+      </p>
+      {description && (
+        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          {description}
+        </p>
+      )}
     </div>
   );
 }

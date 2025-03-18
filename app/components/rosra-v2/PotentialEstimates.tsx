@@ -7,11 +7,11 @@ import { CalculationData } from '../../types/calculationData'
 import CountrySelector from '../CountrySelector'
 import { getCountryEconomicData } from '../../services/economicDataService'
 import { getCountryCalculationData } from '../../services/calculationService'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { ChevronDownIcon } from '@heroicons/react/24/outline'
 import { getCountries } from '../../services/countryService'
-import GapCard from './gap-analysis/GapCard'; // Import GapCard
-import TotalEstimateAnalysis from './gap-analysis/TotalEstimateAnalysis'; // Import TotalEstimateAnalysis
+import TopOsrConfigModal from './TopOsrConfigModal'
+
 
 interface AnalysisInputs {
   financialYear: string
@@ -26,14 +26,16 @@ interface AnalysisInputs {
 interface PotentialEstimatesProps {
   inputs: AnalysisInputs
   onInputChange: (inputs: AnalysisInputs) => void
+  activeTab: string
 }
 
-export default function PotentialEstimates({ inputs, onInputChange }: PotentialEstimatesProps) {
+export default function PotentialEstimates({ inputs, onInputChange, activeTab }: PotentialEstimatesProps) {
   const latestYear = '2019'
   const [selectedCountry, setSelectedCountry] = useState<Country | undefined>()
   const [economicData, setEconomicData] = useState<EconomicData | null>(null)
   const [calculationData, setCalculationData] = useState<CalculationData[]>([])
   const [isFormulaVisible, setIsFormulaVisible] = useState(false)
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
 
   // Add useEffect to set default country to Kenya
   useEffect(() => {
@@ -384,311 +386,411 @@ export default function PotentialEstimates({ inputs, onInputChange }: PotentialE
   }
 
   return (
-    <div className="space-y-8">
-      
-
-      {/* Inputs & Analysis Section */}
-      <div className="bg-white dark:bg-white/5 shadow-lg dark:backdrop-blur-lg rounded-2xl border border-gray-200 dark:border-white/10 p-6">
-        <h3 className="text-xl font-semibold text-primary-light dark:text-primary-dark mb-6">
-          Inputs & Analysis
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* Year Selector - Now First */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Last Financial Year Ending in
-            </label>
-            <select
-              name="financialYear"
-              value={inputs.financialYear}
-              onChange={(e) => handleInputChange(e as unknown as React.ChangeEvent<HTMLInputElement>)}
-              className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
-            >
-              {years.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Country Selector - Now Second */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Country
-            </label>
-            <CountrySelector
-              onSelect={(country) => {
-                setSelectedCountry(country)
-                onInputChange({ ...inputs, state: '' })
-              }}
-              selectedCountry={selectedCountry}
-            />
-          </div>
-
-          {/* State/Province Selector */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              State, Province, Region, or County
-            </label>
-            <select
-              name="state"
-              value={inputs.state}
-              onChange={(e) => handleInputChange(e as unknown as React.ChangeEvent<HTMLInputElement>)}
-              className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
-              disabled={!selectedCountry}
-            >
-              <option value="">Select {selectedCountry?.states?.[0]?.type || 'state/province'}</option>
-              {selectedCountry?.states?.map((state) => (
-                <option key={state.id} value={state.name}>
-                  {state.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Currency Dropdown */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Currency
-            </label>
-            <select
-              name="currency"
-              value={inputs.currency}
-              onChange={(e) => handleInputChange(e as unknown as React.ChangeEvent<HTMLInputElement>)}
-              className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
-              disabled={!selectedCountry}
-            >
-              <option value="">Select currency</option>
-              {selectedCountry && (
-                <option value={selectedCountry.currency}>
-                  {selectedCountry.currency} - {selectedCountry.currency_name} ({selectedCountry.currency_symbol})
-                </option>
-              )}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              OSR in {selectedYear}
-            </label>
-            <input
-              type="number"
-              name="actualOSR"
-              value={inputs.actualOSR}
-              onChange={handleInputChange}
-              placeholder="Enter amount"
-              className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Budgeted OSR in {selectedYear}
-            </label>
-            <input
-              type="number"
-              name="budgetedOSR"
-              value={inputs.budgetedOSR}
-              onChange={handleInputChange}
-              placeholder="Enter amount"
-              className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Population in {selectedYear}
-            </label>
-            <input
-              type="number"
-              name="population"
-              value={inputs.population}
-              onChange={handleInputChange}
-              placeholder="Enter population"
-              className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              GDP in {selectedYear}
-            </label>
-            <input
-              type="number"
-              name="gdp"
-              value={inputs.gdp}
-              onChange={handleInputChange}
-              placeholder="Enter GDP"
-              className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Rapid Estimate of OSR Gap Section */}
-      <div className="bg-white dark:bg-white/5 shadow-lg dark:backdrop-blur-lg rounded-2xl border border-gray-200 dark:border-white/10 p-6">
-        <h3 className="text-xl font-semibold text-primary-light dark:text-primary-dark mb-6">
-          Rapid Estimate of OSR Gap
-        </h3>
-        <div className="h-[400px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={getGapChartData()}
-              margin={{
-                top: 20,
-                right: 30,
-                left: 20,
-                bottom: 5,
-              }}
-            >
-              <XAxis dataKey="name" />
-              <YAxis 
-                label={{ 
-                  value: `${selectedCountry?.currency_symbol || '$'} per capita`,
-                  angle: -90,
-                  position: 'insideLeft',
-                  style: { fill: '#888' }
-                }}
-              />
-              <Tooltip 
-                formatter={(value: number) => [
-                  `${selectedCountry?.currency_symbol || '$'}${formatNumber(value)}`,
-                  value === 0 ? 'No Gap' : ''
-                ]}
-              />
-              <Legend />
-              <Bar 
-                dataKey="Actual OSR per capita" 
-                stackId="a" 
-                fill="#60a5fa" // blue-400
-                name="Actual OSR per capita"
-              />
-              <Bar 
-                dataKey="Revenue Gap" 
-                stackId="a" 
-                fill="#f87171" // red-400
-                name="Revenue Gap"
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-       
-        {/* Formula Section */}
-        <div className="mt-8">
-          <button
-            onClick={() => setIsFormulaVisible(!isFormulaVisible)}
-            className="w-full flex items-center justify-between p-4 bg-blue-50/50 dark:bg-blue-900/20 rounded-t-xl border border-blue-100 dark:border-blue-800 hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-colors"
-          >
-            <h4 className="text-lg font-semibold text-primary-light dark:text-primary-dark">
-              Formula Used
-            </h4>
-            <ChevronDownIcon 
-              className={`w-5 h-5 text-primary-light dark:text-primary-dark transition-transform duration-200 ${
-                isFormulaVisible ? 'rotate-180' : ''
-              }`}
-            />
-          </button>
-          
-          <div className={`overflow-hidden transition-all duration-200 ease-in-out ${
-            isFormulaVisible ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
-          }`}>
-            <div className="p-6 bg-blue-50/50 dark:bg-blue-900/20 rounded-b-xl border-x border-b border-blue-100 dark:border-blue-800">
+    <div className="space-y-6">
+      {/* Main Content */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Left Column - 1/3 */}
+        <div className="lg:w-1/3 space-y-6">
+          {/* Inputs & Analysis Section */}
+          <div className="bg-white dark:bg-white/5 shadow-lg dark:backdrop-blur-lg rounded-2xl border border-gray-200 dark:border-white/10 p-6">
+            <h3 className="text-xl font-semibold text-primary-light dark:text-primary-dark mb-6">
+              Inputs & Analysis
+            </h3>
+            <div className="space-y-6">
+              {/* Location Selection Group */}
               <div className="space-y-4">
-                <div className="flex flex-col gap-2">
-                  <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
-                    UN-Habitat Top-down Estimate:
-                  </p>
-                  <div className="bg-white dark:bg-gray-800 p-3 rounded-lg inline-block">
-                    <code className="text-blue-600 dark:text-blue-400">
-                      (GDP / 1,500) × 50
-                    </code>
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
+                  Location Details
+                </h4>
+                <div className="grid grid-cols-1 gap-4">
+                  {/* Country Selector */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Country
+                    </label>
+                    <CountrySelector
+                      onSelect={(country) => {
+                        setSelectedCountry(country)
+                        onInputChange({ ...inputs, state: '' })
+                      }}
+                      selectedCountry={selectedCountry}
+                    />
+                  </div>
+
+                  {/* State/Province Selector */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      State/Province
+                    </label>
+                    <select
+                      name="state"
+                      value={inputs.state}
+                      onChange={(e) => handleInputChange(e as unknown as React.ChangeEvent<HTMLInputElement>)}
+                      className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
+                      disabled={!selectedCountry}
+                    >
+                      <option value="">Select {selectedCountry?.states?.[0]?.type || 'state/province'}</option>
+                      {selectedCountry?.states?.map((state) => (
+                        <option key={state.id} value={state.name}>
+                          {state.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
-                <div className="flex flex-col gap-2">
-                  <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
-                    Actual OSR per capita:
-                  </p>
-                  <div className="bg-white dark:bg-gray-800 p-3 rounded-lg inline-block">
-                    <code className="text-blue-600 dark:text-blue-400">
-                      Actual OSR / Population
-                    </code>
+              </div>
+
+              {/* Time and Currency Group */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
+                  Time Period & Currency
+                </h4>
+                <div className="grid grid-cols-1 gap-4">
+                  {/* Year Selector */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Financial Year
+                    </label>
+                    <select
+                      name="financialYear"
+                      value={inputs.financialYear}
+                      onChange={(e) => handleInputChange(e as unknown as React.ChangeEvent<HTMLInputElement>)}
+                      className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
+                    >
+                      {years.map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Currency Dropdown */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Currency
+                    </label>
+                    <select
+                      name="currency"
+                      value={inputs.currency}
+                      onChange={(e) => handleInputChange(e as unknown as React.ChangeEvent<HTMLInputElement>)}
+                      className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
+                      disabled={!selectedCountry}
+                    >
+                      <option value="">Select currency</option>
+                      {selectedCountry && (
+                        <option value={selectedCountry.currency}>
+                          {selectedCountry.currency} - {selectedCountry.currency_name} ({selectedCountry.currency_symbol})
+                        </option>
+                      )}
+                    </select>
                   </div>
                 </div>
-                <div className="flex flex-col gap-2">
-                  <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
-                    Revenue Gap per capita:
-                  </p>
-                  <div className="bg-white dark:bg-gray-800 p-3 rounded-lg inline-block">
-                    <code className="text-blue-600 dark:text-blue-400">
-                      UN-Habitat Estimate - Actual OSR per capita
-                    </code>
+              </div>
+
+              {/* Financial Data Group */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
+                  Financial Data
+                </h4>
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Actual OSR in {selectedYear}
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <span className="text-gray-500">
+                          {selectedCountry?.currency_symbol || '$'}
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        name="actualOSR"
+                        value={inputs.actualOSR}
+                        onChange={handleInputChange}
+                        placeholder="Enter amount"
+                        className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Budgeted OSR in {selectedYear}
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <span className="text-gray-500">
+                          {selectedCountry?.currency_symbol || '$'}
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        name="budgetedOSR"
+                        value={inputs.budgetedOSR}
+                        onChange={handleInputChange}
+                        placeholder="Enter amount"
+                        className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Economic Data Group */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
+                  Economic Data
+                </h4>
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Population in {selectedYear}
+                    </label>
+                    <input
+                      type="number"
+                      name="population"
+                      value={inputs.population}
+                      onChange={handleInputChange}
+                      placeholder="Enter population"
+                      className="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      GDP in {selectedYear}
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <span className="text-gray-500">
+                          {selectedCountry?.currency_symbol || '$'}
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        name="gdp"
+                        value={inputs.gdp}
+                        onChange={handleInputChange}
+                        placeholder="Enter GDP"
+                        className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Analysis Text Section */}
-        <div className="mt-8 p-6 bg-gray-50 dark:bg-gray-900/50 rounded-xl">
-          <h4 className="text-lg font-semibold text-primary-light dark:text-primary-dark mb-4">
-            Gap Analysis
-          </h4>
-          <p className="text-text-light dark:text-text-dark text-lg leading-relaxed">
-            {getAnalysisText() || 'Please enter all required data to see the analysis.'}
-          </p>
-        </div>
+      
       </div>
+        {/* Right Column - 2/3 */}
+        <div className="lg:w-2/3 space-y-6">
+          {/* Charts Container */}
+          <div className="space-y-6">
+            {/* Rapid Estimate of OSR Gap Section */}
+            <div className="bg-white dark:bg-white/5 shadow-lg dark:backdrop-blur-lg rounded-2xl border border-gray-200 dark:border-white/10 p-6">
+              <h3 className="text-xl font-semibold text-primary-light dark:text-primary-dark mb-6">
+                Rapid Estimate of OSR Gap
+              </h3>
+              <div className="h-[400px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={getGapChartData()}
+                    margin={{
+                      top: 20,
+                      right: 80,
+                      left: 80,
+                      bottom: 5,
+                    }}
+                    barSize={400}
+                    maxBarSize={600}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                    <XAxis 
+                      dataKey="name" 
+                      axisLine={{ stroke: '#E5E7EB' }}
+                      tickLine={false}
+                      height={60}
+                      tick={{ fill: '#6B7280' }}
+                    />
+                    <YAxis 
+                      label={{ 
+                        value: `${selectedCountry?.currency_symbol || '$'} per capita`,
+                        angle: -90,
+                        position: 'insideLeft',
+                        offset: -35,
+                        style: { fill: '#6B7280' }
+                      }}
+                      axisLine={{ stroke: '#E5E7EB' }}
+                      tickLine={false}
+                      tick={{ fill: '#6B7280' }}
+                      width={80}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => [
+                        `${selectedCountry?.currency_symbol || '$'}${formatNumber(value)}`,
+                        value === 0 ? 'No Gap' : ''
+                      ]}
+                      contentStyle={{
+                        backgroundColor: 'white',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '6px',
+                        padding: '8px'
+                      }}
+                    />
+                    <Legend 
+                      wrapperStyle={{
+                        paddingTop: '20px'
+                      }}
+                      iconType="circle"
+                      iconSize={8}
+                    />
+                    <Bar 
+                      dataKey="Actual OSR per capita" 
+                      stackId="a" 
+                      fill="#60A5FA"  // Using a blue similar to the image
+                      name="Actual Revenue"
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar 
+                      dataKey="Revenue Gap" 
+                      stackId="a" 
+                      fill="#F97316"  // Using an orange similar to the image
+                      name="Total Gap Mixed Fees"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+             
+              {/* Formula Section */}
+              <div className="mt-8">
+                <button
+                  onClick={() => setIsFormulaVisible(!isFormulaVisible)}
+                  className="w-full flex items-center justify-between p-4 bg-blue-50/50 dark:bg-blue-900/20 rounded-t-xl border border-blue-100 dark:border-blue-800 hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-colors"
+                >
+                  <h4 className="text-lg font-semibold text-primary-light dark:text-primary-dark">
+                    Formula Used
+                  </h4>
+                  <ChevronDownIcon 
+                    className={`w-5 h-5 text-primary-light dark:text-primary-dark transition-transform duration-200 ${
+                      isFormulaVisible ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+                
+                <div className={`overflow-hidden transition-all duration-200 ease-in-out ${
+                  isFormulaVisible ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+                }`}>
+                  <div className="p-6 bg-blue-50/50 dark:bg-blue-900/20 rounded-b-xl border-x border-b border-blue-100 dark:border-blue-800">
+                    <div className="space-y-4">
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+                          UN-Habitat Top-down Estimate:
+                        </p>
+                        <div className="bg-white dark:bg-gray-800 p-3 rounded-lg inline-block">
+                          <code className="text-blue-600 dark:text-blue-400">
+                            (GDP / 1,500) × 50
+                          </code>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+                          Actual OSR per capita:
+                        </p>
+                        <div className="bg-white dark:bg-gray-800 p-3 rounded-lg inline-block">
+                          <code className="text-blue-600 dark:text-blue-400">
+                            Actual OSR / Population
+                          </code>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+                          Revenue Gap per capita:
+                        </p>
+                        <div className="bg-white dark:bg-gray-800 p-3 rounded-lg inline-block">
+                          <code className="text-blue-600 dark:text-blue-400">
+                            UN-Habitat Estimate - Actual OSR per capita
+                          </code>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-      {/* Actual OSR vs Estimates of OSR Potential Section */}
-      <div className="bg-white dark:bg-white/5 shadow-lg dark:backdrop-blur-lg rounded-2xl border border-gray-200 dark:border-white/10 p-6">
-        <h3 className="text-xl font-semibold text-primary-light dark:text-primary-dark mb-6">
-          Actual OSR vs Estimates of OSR Potential
-        </h3>
-        <div className="h-[400px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={getAllEstimatesChartData()}
-              margin={{
-                top: 20,
-                right: 30,
-                left: 50,
-                bottom: 120,
-              }}
-            >
-              <XAxis 
-                dataKey="name" 
-                angle={0}
-                textAnchor="middle"
-                height={120}
-                interval={0}
-                tick={{ fontSize: 12 }}
-              />
-              <YAxis 
-                label={{ 
-                  value: `${selectedCountry?.currency_symbol || '$'} per capita`,
-                  angle: -90,
-                  position: 'insideLeft',
-                  offset: -40,
-                  style: { fill: '#888' }
-                }}
-              />
-              <Tooltip 
-                formatter={(value: number) => [
-                  `${selectedCountry?.currency_symbol || '$'}${formatNumber(value)}`,
-                  'Value'
-                ]}
-              />
-              <Bar 
-                dataKey="value" 
-                fill="#ed6d85"
-                name="Amount per capita"
-              />
-            </BarChart>
-          </ResponsiveContainer>
+                {/* Analysis Text Section */}
+                <div className="mt-8 p-6 bg-gray-50 dark:bg-gray-900/50 rounded-xl">
+                  <h4 className="text-lg font-semibold text-primary-light dark:text-primary-dark mb-4">
+                    Gap Analysis
+                  </h4>
+                  <p className="text-text-light dark:text-text-dark text-lg leading-relaxed">
+                    {getAnalysisText() || 'Please enter all required data to see the analysis.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Actual OSR vs Estimates of OSR Potential Section */}
+              <div className="bg-white dark:bg-white/5 shadow-lg dark:backdrop-blur-lg rounded-2xl border border-gray-200 dark:border-white/10 p-6">
+                <h3 className="text-xl font-semibold text-primary-light dark:text-primary-dark mb-6">
+                  Actual OSR vs Estimates of OSR Potential
+                </h3>
+                <div className="h-[400px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={getAllEstimatesChartData()}
+                      margin={{
+                        top: 20,
+                        right: 30,
+                        left: 50,
+                        bottom: 120,
+                      }}
+                    >
+                      <XAxis 
+                        dataKey="name" 
+                        angle={0}
+                        textAnchor="middle"
+                        height={120}
+                        interval={0}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis 
+                        label={{ 
+                          value: `${selectedCountry?.currency_symbol || '$'} per capita`,
+                          angle: -90,
+                          position: 'insideLeft',
+                          offset: -40,
+                          style: { fill: '#888' }
+                        }}
+                      />
+                      <Tooltip 
+                        formatter={(value: number) => [
+                          `${selectedCountry?.currency_symbol || '$'}${formatNumber(value)}`,
+                          'Value'
+                        ]}
+                      />
+                      <Bar 
+                        dataKey="value" 
+                        fill="#ed6d85"
+                        name="Amount per capita"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Config Modal */}
+          {isConfigModalOpen && (
+            <TopOsrConfigModal
+              isOpen={isConfigModalOpen}
+              onClose={() => setIsConfigModalOpen(false)}
+            />
+          )}
         </div>
-      </div>
+    </div>
     </div>
   )
 }

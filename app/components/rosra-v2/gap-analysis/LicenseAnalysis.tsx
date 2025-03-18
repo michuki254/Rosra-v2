@@ -88,9 +88,9 @@ export function calculateTotalGap(metrics: LicenseMetrics) {
 }
 
 export default function LicenseAnalysis({ onMetricsChange }: { onMetricsChange?: (metrics: any) => void }) {
-  const [categories] = useState<Category[]>([
+  const [categories, setCategories] = useState<Category[]>([
     {
-      name: 'Category A',
+      name: 'Business Permits',
       estimatedLicensees: 70000,
       registeredLicensees: 15000,
       compliantLicensees: 10000,
@@ -99,7 +99,7 @@ export default function LicenseAnalysis({ onMetricsChange }: { onMetricsChange?:
       isExpanded: false
     },
     {
-      name: 'Category B',
+      name: 'Health Licenses',
       estimatedLicensees: 5000,
       registeredLicensees: 15000,
       compliantLicensees: 4000,
@@ -108,7 +108,7 @@ export default function LicenseAnalysis({ onMetricsChange }: { onMetricsChange?:
       isExpanded: false
     },
     {
-      name: 'Category C',
+      name: 'Operating Licenses',
       estimatedLicensees: 5000,
       registeredLicensees: 10000,
       compliantLicensees: 2000,
@@ -117,6 +117,22 @@ export default function LicenseAnalysis({ onMetricsChange }: { onMetricsChange?:
       isExpanded: false
     }
   ]);
+
+  const toggleCategory = (index: number) => {
+    setCategories(prevCategories => 
+      prevCategories.map((cat, i) => 
+        i === index ? { ...cat, isExpanded: !cat.isExpanded } : cat
+      )
+    );
+  };
+
+  const updateCategoryName = (index: number, newName: string) => {
+    setCategories(prevCategories =>
+      prevCategories.map((cat, i) =>
+        i === index ? { ...cat, name: newName } : cat
+      )
+    );
+  };
 
   useEffect(() => {
     if (onMetricsChange) {
@@ -146,12 +162,6 @@ export default function LicenseAnalysis({ onMetricsChange }: { onMetricsChange?:
   const [isFormulaVisible, setIsFormulaVisible] = useState(false);
   const [showCategoryBreakdown, setShowCategoryBreakdown] = useState(false);
   const [totalEstimatedLicensees, setTotalEstimatedLicensees] = useState(80000);
-
-  const toggleCategory = (index: number) => {
-    setCategories(categories.map((cat, i) => 
-      i === index ? { ...cat, isExpanded: !cat.isExpanded } : cat
-    ));
-  };
 
   const addCategory = () => {
     const newCategory: Category = {
@@ -272,7 +282,7 @@ export default function LicenseAnalysis({ onMetricsChange }: { onMetricsChange?:
 
   const calculateGapCategoryA = () => {
     // Gap Category A = (Estimated A × Avg Fee A) - (Compliant A × Avg Fee A)
-    const categoryA = categories.find(cat => cat.name === 'Category A');
+    const categoryA = categories.find(cat => cat.name === 'Business Permits');
     if (!categoryA) return 0;
     return (categoryA.estimatedLicensees * categoryA.averagePaidLicenseFee) - 
            (categoryA.compliantLicensees * categoryA.averagePaidLicenseFee);
@@ -280,7 +290,7 @@ export default function LicenseAnalysis({ onMetricsChange }: { onMetricsChange?:
 
   const calculateGapCategoryB = () => {
     // Gap Category B = (Estimated B × Avg Fee B) - (Compliant B × Avg Fee B)
-    const categoryB = categories.find(cat => cat.name === 'Category B');
+    const categoryB = categories.find(cat => cat.name === 'Health Licenses');
     if (!categoryB) return 0;
     return (categoryB.estimatedLicensees * categoryB.averagePaidLicenseFee) - 
            (categoryB.compliantLicensees * categoryB.averagePaidLicenseFee);
@@ -288,7 +298,7 @@ export default function LicenseAnalysis({ onMetricsChange }: { onMetricsChange?:
 
   const calculateGapCategoryC = () => {
     // Gap Category C = (Estimated C × Avg Fee C) - (Compliant C × Avg Fee C)
-    const categoryC = categories.find(cat => cat.name === 'Category C');
+    const categoryC = categories.find(cat => cat.name === 'Operating Licenses');
     if (!categoryC) return 0;
     return (categoryC.estimatedLicensees * categoryC.averagePaidLicenseFee) - 
            (categoryC.compliantLicensees * categoryC.averagePaidLicenseFee);
@@ -606,20 +616,29 @@ export default function LicenseAnalysis({ onMetricsChange }: { onMetricsChange?:
             <div className="space-y-3">
               {categories.map((category, index) => (
                 <div key={index} className="bg-white rounded-md shadow-sm border border-gray-200">
-                  <button
-                    onClick={() => toggleCategory(index)}
-                    className="w-full flex items-center justify-between p-3"
-                  >
-                    <span className="text-sm font-medium text-gray-900">{category.name}</span>
-                    <svg 
-                      className={`w-4 h-4 transition-transform ${category.isExpanded ? 'rotate-180' : ''}`}
-                      fill="none" 
-                      viewBox="0 0 24 24" 
-                      stroke="currentColor"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
+                  <div className="flex items-center justify-between p-3">
+                    <div className="flex-1 flex items-center">
+                      <input
+                        type="text"
+                        value={category.name}
+                        onChange={(e) => updateCategoryName(index, e.target.value)}
+                        className="text-sm font-medium text-gray-900 bg-transparent border-none focus:ring-0 focus:outline-none w-full"
+                      />
+                      <button
+                        onClick={() => toggleCategory(index)}
+                        className="ml-2 p-1 hover:bg-gray-100 rounded-full"
+                      >
+                        <svg 
+                          className={`w-4 h-4 transition-transform ${category.isExpanded ? 'rotate-180' : ''}`}
+                          fill="none" 
+                          viewBox="0 0 24 24" 
+                          stroke="currentColor"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
 
                   {category.isExpanded && (
                     <div className="p-3 pt-0 space-y-3">

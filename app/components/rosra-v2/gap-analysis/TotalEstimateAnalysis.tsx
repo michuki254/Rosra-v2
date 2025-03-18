@@ -20,21 +20,24 @@ interface TotalEstimateAnalysisProps {
 
 export default function TotalEstimateAnalysis({ onMetricsChange }: TotalEstimateAnalysisProps) {
   // State for each revenue stream
-  const [propertyTaxMetrics, setPropertyTaxMetrics] = useState<RevenueMetrics>({ actual: 0, potential: 0, gap: 0 });
-  const [licenseMetrics, setLicenseMetrics] = useState<RevenueMetrics>({ actual: 0, potential: 0, gap: 0 });
-  const [longTermMetrics, setLongTermMetrics] = useState<RevenueMetrics>({ actual: 0, potential: 0, gap: 0 });
-  const [shortTermMetrics, setShortTermMetrics] = useState<RevenueMetrics>({ actual: 0, potential: 0, gap: 0 });
-  const [mixedChargeMetrics, setMixedChargeMetrics] = useState<RevenueMetrics>({ actual: 0, potential: 0, gap: 0 });
+  const [propertyTax, setPropertyTax] = useState<RevenueMetrics>({ actual: 0, potential: 0, gap: 0 });
+  const [license, setLicense] = useState<RevenueMetrics>({ actual: 0, potential: 0, gap: 0 });
+  const [longTerm, setLongTerm] = useState<RevenueMetrics>({ actual: 0, potential: 0, gap: 0 });
+  const [shortTerm, setShortTerm] = useState<RevenueMetrics>({ actual: 0, potential: 0, gap: 0 });
+  const [mixedCharge, setMixedCharge] = useState<RevenueMetrics>({ actual: 0, potential: 0, gap: 0 });
 
   // Calculate totals across all OSRs
-  const totalActual = propertyTaxMetrics.actual + licenseMetrics.actual + longTermMetrics.actual +
-    shortTermMetrics.actual + mixedChargeMetrics.actual;
+  const totalActual = propertyTax.actual + license.actual + longTerm.actual +
+    shortTerm.actual + mixedCharge.actual;
 
-  const totalPotential = propertyTaxMetrics.potential + licenseMetrics.potential + longTermMetrics.potential +
-    shortTermMetrics.potential + mixedChargeMetrics.potential;
+  const totalPotential = propertyTax.potential + license.potential + longTerm.potential +
+    shortTerm.potential + mixedCharge.potential;
 
-  const totalGap = propertyTaxMetrics.gap + licenseMetrics.gap + longTermMetrics.gap +
-    shortTermMetrics.gap + mixedChargeMetrics.gap;
+  const totalGap = propertyTax.gap + license.gap + longTerm.gap +
+    shortTerm.gap + mixedCharge.gap;
+
+  // Calculate Average Gap Percentage
+  const averageGapPercentage = totalPotential > 0 ? (totalGap / totalPotential) * 100 : 0;
 
   // Update parent component with total metrics
   useEffect(() => {
@@ -51,59 +54,78 @@ export default function TotalEstimateAnalysis({ onMetricsChange }: TotalEstimate
     <div className="space-y-8">
       {/* Hidden Analysis Components to get metrics */}
       <div className="hidden">
-        <PropertyTaxAnalysis onMetricsChange={setPropertyTaxMetrics} />
-        <LicenseAnalysis onMetricsChange={setLicenseMetrics} />
-        <LongTermUserChargeAnalysis onMetricsChange={setLongTermMetrics} />
-        <ShortTermUserChargeAnalysis onMetricsChange={setShortTermMetrics} />
-        <MixedUserChargeAnalysis onMetricsChange={setMixedChargeMetrics} />
+        <PropertyTaxAnalysis onMetricsChange={setPropertyTax} />
+        <LicenseAnalysis onMetricsChange={setLicense} />
+        <LongTermUserChargeAnalysis onMetricsChange={setLongTerm} />
+        <ShortTermUserChargeAnalysis onMetricsChange={setShortTerm} />
+        <MixedUserChargeAnalysis onMetricsChange={setMixedCharge} />
       </div>
 
       {/* Individual OSR Potential Revenue Cards */}
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">
-          Potential Revenue by OSR
-        </h2>
+        <h2 className="text-2xl font-bold mb-4">Potential Revenue by OSR</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <RevenueCard
             title="Property Tax Potential"
-            amount={propertyTaxMetrics.potential}
+            amount={propertyTax.potential}
           />
           <RevenueCard
             title="License Fees Potential"
-            amount={licenseMetrics.potential}
+            amount={license.potential}
           />
           <RevenueCard
             title="Long Term User Charges Potential"
-            amount={longTermMetrics.potential}
+            amount={longTerm.potential}
           />
           <RevenueCard
             title="Short Term User Charges Potential"
-            amount={shortTermMetrics.potential}
+            amount={shortTerm.potential}
           />
           <RevenueCard
             title="Mixed User Charges Potential"
-            amount={mixedChargeMetrics.potential}
+            amount={mixedCharge.potential}
           />
         </div>
       </div>
 
       {/* Total Revenue Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <RevenueCard
-          title="Total Actual Revenue"
-          amount={totalActual}
-          className="border-l-4 border-blue-500"
-        />
-        <RevenueCard
-          title="Total Potential Revenue"
-          amount={totalPotential}
-          className="border-l-4 border-orange-500"
-        />
-        <RevenueCard
-          title="Total Revenue Gap"
-          amount={totalGap}
-          className="border-l-4 border-purple-500"
-        />
+      <div>
+        <h2 className="text-2xl font-bold mb-4">Total Revenue Analysis</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <RevenueCard
+            title="Total Actual Revenue"
+            amount={totalActual}
+            description="Current annual revenue from all OSRs"
+          />
+          <RevenueCard
+            title="Total Potential Revenue"
+            amount={totalPotential}
+            description="Maximum possible annual revenue from all OSRs"
+          />
+          <RevenueCard
+            title="Total Revenue Gap"
+            amount={totalGap}
+            description="Difference between potential and actual revenue"
+          />
+        </div>
+      </div>
+
+      {/* Average Gap Card */}
+      <div>
+        <h2 className="text-2xl font-bold mb-4">Gap Analysis</h2>
+        <div className="grid grid-cols-1 gap-6">
+          <RevenueCard
+            title="Average Gap Across OSRs"
+            amount={averageGapPercentage}
+            isPercentage={true}
+            description="Total Revenue Gap as a percentage of Total Potential Revenue"
+            className={`${
+              averageGapPercentage > 50 ? 'bg-red-50 dark:bg-red-900/10' : 
+              averageGapPercentage > 25 ? 'bg-yellow-50 dark:bg-yellow-900/10' : 
+              'bg-green-50 dark:bg-green-900/10'
+            }`}
+          />
+        </div>
       </div>
     </div>
   );

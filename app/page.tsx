@@ -59,12 +59,12 @@ export default function Home() {
                     >
                       SAMPLE REPORT V1
                     </Link>
-                    <a 
-                      href="#" 
+                    <Link 
+                      href="/rosra-v2"
                       className="px-6 py-3 border border-blue-600 text-blue-400 hover:bg-blue-600/10 rounded-lg font-medium transition-colors"
                     >
                       SAMPLE REPORT V2
-                    </a>
+                    </Link>
                   </div>
                 </div>
 
@@ -193,8 +193,11 @@ export default function Home() {
 
           {/* OSR Info Section */}
           <section className="mb-16">
-            <h2 className="text-3xl md:text-4xl text-primary-light dark:text-primary-dark font-bold mb-6">What is Own Source Revenue (OSR)?</h2>
-            
+            <h2 className="text-3xl md:text-4xl text-primary-light dark:text-primary-dark font-bold mb-6">
+              What is Own Source Revenue (OSR)?
+            </h2>
+
+            {/* Main Description */}
             <div className="flex flex-col gap-8">
               {/* Description */}
               <div className="flex justify-between text-center">
@@ -673,7 +676,7 @@ export default function Home() {
       <footer className="border-t border-gray-800">
         <div className="max-w-7xl mx-auto px-8 py-8">
           <p className="text-center text-sm text-text-light dark:text-text-dark">
-            © 2012-2024 United Nations Human Settlements Programme
+            2012-2024 United Nations Human Settlements Programme
           </p>
           <div className="flex justify-center gap-4 mt-2">
             <a href="#" className="text-primary-light dark:text-primary-dark hover:opacity-80">Contact</a>

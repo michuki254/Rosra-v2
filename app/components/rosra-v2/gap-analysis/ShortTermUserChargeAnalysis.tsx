@@ -40,7 +40,13 @@ interface ShortTermUserChargeMetrics {
 }
 
 interface ShortTermUserChargeAnalysisProps {
-  onChange?: (data: ShortTermUserChargeMetrics) => void;
+  onMetricsChange?: (metrics: RevenueMetrics) => void;
+}
+
+interface RevenueMetrics {
+  actual: number;
+  potential: number;
+  gap: number;
 }
 
 interface Category {
@@ -88,6 +94,12 @@ export function calculateTotalPotentialRevenue(metrics: ShortTermMetrics) {
   }, 0);
 }
 
+export function calculateTotalPotentialRevenueOld(inputs: ShortTermUserChargeMetrics) {
+  return inputs.categories.reduce((total, category) => {
+    return total + (category.estimatedDailyFees * category.potentialRate * 365);
+  }, 0);
+}
+
 export function calculateTotalGap(metrics: ShortTermMetrics) {
   const potentialRevenue = calculateTotalPotentialRevenue(metrics);
   const actualRevenue = calculateActualRevenue({
@@ -99,96 +111,14 @@ export function calculateTotalGap(metrics: ShortTermMetrics) {
   return potentialRevenue - actualRevenue;
 }
 
-export const calculateTotalPotentialRevenueOld = () => {
-  const inputs = {
-    estimatedDailyFees: 1000,
-    actualDailyFees: 700,
-    categories: [
-      {
-        id: '1',
-        name: 'Category A',
-        isExpanded: false,
-        estimatedDailyFees: 600,
-        actualDailyFees: 500,
-        potentialRate: 100,
-        actualRate: 10
-      },
-      {
-        id: '2',
-        name: 'Category B',
-        isExpanded: false,
-        estimatedDailyFees: 100,
-        actualDailyFees: 50,
-        potentialRate: 50,
-        actualRate: 5
-      },
-      {
-        id: '3',
-        name: 'Category C',
-        isExpanded: false,
-        estimatedDailyFees: 300,
-        actualDailyFees: 150,
-        potentialRate: 150,
-        actualRate: 20
-      }
-    ]
-  };
-  return inputs.categories.reduce((total, category) => {
-    return total + (category.estimatedDailyFees * category.potentialRate * 365);
-  }, 0);
-};
-
-export const calculateTotalGapOld = () => {
-  const inputs = {
-    estimatedDailyFees: 1000,
-    actualDailyFees: 700,
-    categories: [
-      {
-        id: '1',
-        name: 'Category A',
-        isExpanded: false,
-        estimatedDailyFees: 600,
-        actualDailyFees: 500,
-        potentialRate: 100,
-        actualRate: 10
-      },
-      {
-        id: '2',
-        name: 'Category B',
-        isExpanded: false,
-        estimatedDailyFees: 100,
-        actualDailyFees: 50,
-        potentialRate: 50,
-        actualRate: 5
-      },
-      {
-        id: '3',
-        name: 'Category C',
-        isExpanded: false,
-        estimatedDailyFees: 300,
-        actualDailyFees: 150,
-        potentialRate: 150,
-        actualRate: 20
-      }
-    ]
-  };
-  const totalPotentialRevenue = inputs.categories.reduce((total, category) => {
-    return total + (category.estimatedDailyFees * category.potentialRate * 365);
-  }, 0);
-  const actualRevenue = inputs.categories.reduce((total, category) => {
-    return total + (category.actualDailyFees * category.actualRate * 365);
-  }, 0);
-  return totalPotentialRevenue - actualRevenue;
-};
-
-export default function ShortTermUserChargeAnalysis({ onChange }: ShortTermUserChargeAnalysisProps) {
+export default function ShortTermUserChargeAnalysis({ onMetricsChange }: ShortTermUserChargeAnalysisProps) {
   const [inputs, setInputs] = useState<ShortTermUserChargeMetrics>({
     estimatedDailyFees: 1000,
     actualDailyFees: 700,
     categories: [
       {
         id: '1',
-        name: 'Category A',
+        name: 'Parking Fees',
         isExpanded: false,
         estimatedDailyFees: 600,
         actualDailyFees: 500,
@@ -197,7 +127,7 @@ export default function ShortTermUserChargeAnalysis({ onChange }: ShortTermUserC
       },
       {
         id: '2',
-        name: 'Category B',
+        name: 'Market Stall Fees',
         isExpanded: false,
         estimatedDailyFees: 100,
         actualDailyFees: 50,
@@ -206,7 +136,7 @@ export default function ShortTermUserChargeAnalysis({ onChange }: ShortTermUserC
       },
       {
         id: '3',
-        name: 'Category C',
+        name: 'Public Facility Usage',
         isExpanded: false,
         estimatedDailyFees: 300,
         actualDailyFees: 150,
@@ -226,7 +156,6 @@ export default function ShortTermUserChargeAnalysis({ onChange }: ShortTermUserC
       [name]: Number(value)
     };
     setInputs(newInputs);
-    onChange?.(newInputs);
   };
 
   const handleCategoryInputChange = (categoryId: string, field: keyof CategoryData, value: number) => {
@@ -238,7 +167,16 @@ export default function ShortTermUserChargeAnalysis({ onChange }: ShortTermUserC
     });
     const newInputs = { ...inputs, categories: newCategories };
     setInputs(newInputs);
-    onChange?.(newInputs);
+  };
+
+  const handleCategoryNameChange = (categoryId: string, newName: string) => {
+    const newCategories = inputs.categories.map(cat => {
+      if (cat.id === categoryId) {
+        return { ...cat, name: newName };
+      }
+      return cat;
+    });
+    setInputs({ ...inputs, categories: newCategories });
   };
 
   const toggleCategory = (categoryId: string) => {
@@ -266,7 +204,6 @@ export default function ShortTermUserChargeAnalysis({ onChange }: ShortTermUserC
       categories: [...inputs.categories, newCategory]
     };
     setInputs(newInputs);
-    onChange?.(newInputs);
   };
 
   // Calculate Actual Revenue = (B103*B109*365)+(B104*B110*365)+(B105*B111*365)
@@ -549,6 +486,25 @@ export default function ShortTermUserChargeAnalysis({ onChange }: ShortTermUserC
     });
   }, [metrics]);
 
+  useEffect(() => {
+    if (onMetricsChange) {
+      const actualRevenue = calculateActualRevenue({
+        categories: inputs.categories.map(category => ({
+          actualDailyFees: category.actualDailyFees,
+          actualRate: category.actualRate
+        }))
+      });
+      const potentialRevenue = calculateTotalPotentialRevenueOld(inputs);
+      const gap = potentialRevenue - actualRevenue;
+      
+      onMetricsChange({
+        actual: actualRevenue,
+        potential: potentialRevenue,
+        gap: gap
+      });
+    }
+  }, [inputs, onMetricsChange]);
+
   return (
     <div className="flex">
       {/* Left side - Input Form */}
@@ -602,22 +558,31 @@ export default function ShortTermUserChargeAnalysis({ onChange }: ShortTermUserC
             </div>
 
             <div className="space-y-4">
-              {inputs.categories.map(category => (
-                <div key={category.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm">
-                  <button
-                    className="w-full px-6 py-3 flex justify-between items-center"
-                    onClick={() => toggleCategory(category.id)}
-                  >
-                    <span className="text-base font-medium">{category.name}</span>
-                    <svg
-                      className={`w-4 h-4 transform transition-transform ${category.isExpanded ? 'rotate-180' : ''}`}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
+              {inputs.categories.map((category) => (
+                <div key={category.id} className="bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-white/10">
+                  <div className="flex items-center justify-between p-3">
+                    <div className="flex-1 flex items-center">
+                      <input
+                        type="text"
+                        value={category.name}
+                        onChange={(e) => handleCategoryNameChange(category.id, e.target.value)}
+                        className="text-sm font-medium text-gray-900 dark:text-white bg-transparent border-none focus:ring-0 focus:outline-none w-full"
+                      />
+                      <button
+                        onClick={() => toggleCategory(category.id)}
+                        className="ml-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
+                      >
+                        <svg 
+                          className={`w-4 h-4 transition-transform ${category.isExpanded ? 'rotate-180' : ''}`}
+                          fill="none" 
+                          viewBox="0 0 24 24" 
+                          stroke="currentColor"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
 
                   {category.isExpanded && (
                     <div className="px-6 pb-4 space-y-4">

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -51,15 +51,25 @@ interface MixedUserChargeAnalysisProps {
 
 export function calculateTotalPotentialRevenue(metrics: MixedChargeMetrics) {
   return metrics.categories.reduce((total, category) => {
-    const potentialRevenue = category.estimatedUsers * category.standardRate;
-    return total + potentialRevenue;
+    let annualRevenue = 0;
+    if (category.name === 'Daily Users') {
+      annualRevenue = category.estimatedUsers * category.standardRate * 365; // Daily to annual
+    } else if (category.name === 'Monthly Users') {
+      annualRevenue = category.estimatedUsers * category.standardRate * 12; // Monthly to annual
+    }
+    return total + annualRevenue;
   }, 0);
 }
 
 export function calculateActualRevenue(metrics: MixedChargeMetrics) {
   return metrics.categories.reduce((total, category) => {
-    const actualRevenue = category.registeredUsers * category.averagePaidRate;
-    return total + actualRevenue;
+    let annualRevenue = 0;
+    if (category.name === 'Daily Users') {
+      annualRevenue = category.registeredUsers * category.averagePaidRate * 365; // Daily to annual
+    } else if (category.name === 'Monthly Users') {
+      annualRevenue = category.registeredUsers * category.averagePaidRate * 12; // Monthly to annual
+    }
+    return total + annualRevenue;
   }, 0);
 }
 
@@ -81,28 +91,37 @@ export default function MixedUserChargeAnalysis({ onChange, onMetricsChange }: M
     actualMonthlyRate: 12
   });
 
-  const [metrics, setMetrics] = useState({
+  // Convert inputs to metrics format
+  const metrics = useMemo(() => ({
     categories: [
       {
-        name: 'Stadium Usage',
-        estimatedUsers: 5000,
-        standardRate: 200,
-        registeredUsers: 3500,
-        averagePaidRate: 150
+        name: 'Daily Users',
+        estimatedUsers: inputs.estimatedDailyUsers,
+        standardRate: inputs.averageDailyUserFee,
+        registeredUsers: inputs.actualDailyUsers,
+        averagePaidRate: inputs.actualDailyUserFee
       },
       {
-        name: 'Community Hall',
-        estimatedUsers: 2000,
-        standardRate: 300,
-        registeredUsers: 1500,
-        averagePaidRate: 250
+        name: 'Monthly Users',
+        estimatedUsers: inputs.availableMonthlyUsers,
+        standardRate: inputs.averageMonthlyRate,
+        registeredUsers: inputs.payingMonthlyUsers,
+        averagePaidRate: inputs.actualMonthlyRate
       }
     ]
-  });
+  }), [inputs]);
 
-  const [showFormula, setShowFormula] = useState(false);
-  const [showGapFormulas, setShowGapFormulas] = useState(false);
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    const newInputs = {
+      ...inputs,
+      [name]: Number(value)
+    };
+    setInputs(newInputs);
+    onChange?.(newInputs);
+  };
 
+  // Update parent component with metrics whenever inputs change
   useEffect(() => {
     if (onMetricsChange) {
       const potential = calculateTotalPotentialRevenue(metrics);
@@ -117,12 +136,8 @@ export default function MixedUserChargeAnalysis({ onChange, onMetricsChange }: M
     }
   }, [metrics, onMetricsChange]);
 
-  const handleInputChange = (field: keyof MixedUserInputs, value: string) => {
-    const numValue = parseFloat(value) || 0;
-    const updatedInputs = { ...inputs, [field]: numValue };
-    setInputs(updatedInputs);
-    onChange?.(updatedInputs);
-  };
+  const [showFormula, setShowFormula] = useState(false);
+  const [showGapFormulas, setShowGapFormulas] = useState(false);
 
   // Calculate revenues and gaps
   const actualRevenue = ((inputs.actualDailyUsers * inputs.actualDailyUserFee) * 365) + 
@@ -391,7 +406,8 @@ export default function MixedUserChargeAnalysis({ onChange, onMetricsChange }: M
                   <input
                     type="number"
                     value={inputs.estimatedDailyUsers}
-                    onChange={(e) => handleInputChange('estimatedDailyUsers', e.target.value)}
+                    onChange={(e) => handleInputChange(e)}
+                    name="estimatedDailyUsers"
                     className="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -403,7 +419,8 @@ export default function MixedUserChargeAnalysis({ onChange, onMetricsChange }: M
                   <input
                     type="number"
                     value={inputs.actualDailyUsers}
-                    onChange={(e) => handleInputChange('actualDailyUsers', e.target.value)}
+                    onChange={(e) => handleInputChange(e)}
+                    name="actualDailyUsers"
                     className="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -416,7 +433,8 @@ export default function MixedUserChargeAnalysis({ onChange, onMetricsChange }: M
                     type="number"
                     step="0.1"
                     value={inputs.averageDailyUserFee}
-                    onChange={(e) => handleInputChange('averageDailyUserFee', e.target.value)}
+                    onChange={(e) => handleInputChange(e)}
+                    name="averageDailyUserFee"
                     className="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -429,7 +447,8 @@ export default function MixedUserChargeAnalysis({ onChange, onMetricsChange }: M
                     type="number"
                     step="0.1"
                     value={inputs.actualDailyUserFee}
-                    onChange={(e) => handleInputChange('actualDailyUserFee', e.target.value)}
+                    onChange={(e) => handleInputChange(e)}
+                    name="actualDailyUserFee"
                     className="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -448,7 +467,8 @@ export default function MixedUserChargeAnalysis({ onChange, onMetricsChange }: M
                   <input
                     type="number"
                     value={inputs.availableMonthlyUsers}
-                    onChange={(e) => handleInputChange('availableMonthlyUsers', e.target.value)}
+                    onChange={(e) => handleInputChange(e)}
+                    name="availableMonthlyUsers"
                     className="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -460,7 +480,8 @@ export default function MixedUserChargeAnalysis({ onChange, onMetricsChange }: M
                   <input
                     type="number"
                     value={inputs.payingMonthlyUsers}
-                    onChange={(e) => handleInputChange('payingMonthlyUsers', e.target.value)}
+                    onChange={(e) => handleInputChange(e)}
+                    name="payingMonthlyUsers"
                     className="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -472,7 +493,8 @@ export default function MixedUserChargeAnalysis({ onChange, onMetricsChange }: M
                   <input
                     type="number"
                     value={inputs.averageMonthlyRate}
-                    onChange={(e) => handleInputChange('averageMonthlyRate', e.target.value)}
+                    onChange={(e) => handleInputChange(e)}
+                    name="averageMonthlyRate"
                     className="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -484,7 +506,8 @@ export default function MixedUserChargeAnalysis({ onChange, onMetricsChange }: M
                   <input
                     type="number"
                     value={inputs.actualMonthlyRate}
-                    onChange={(e) => handleInputChange('actualMonthlyRate', e.target.value)}
+                    onChange={(e) => handleInputChange(e)}
+                    name="actualMonthlyRate"
                     className="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>

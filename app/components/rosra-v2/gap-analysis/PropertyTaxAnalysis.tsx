@@ -56,7 +56,7 @@ const PropertyTaxAnalysis: FC<PropertyTaxAnalysisProps> = ({ onMetricsChange }) 
     categories: [
       {
         id: '1',
-        name: 'Category A',
+        name: 'Residential Properties',
         registeredTaxpayers: 30000,
         compliantTaxpayers: 20000,
         actualLandValue: 10000,
@@ -66,7 +66,7 @@ const PropertyTaxAnalysis: FC<PropertyTaxAnalysisProps> = ({ onMetricsChange }) 
       },
       {
         id: '2',
-        name: 'Category B',
+        name: 'Commercial Properties',
         registeredTaxpayers: 15000,
         compliantTaxpayers: 5000,
         actualLandValue: 20000,
@@ -76,7 +76,7 @@ const PropertyTaxAnalysis: FC<PropertyTaxAnalysisProps> = ({ onMetricsChange }) 
       },
       {
         id: '3',
-        name: 'Category C',
+        name: 'Industrial Properties',
         registeredTaxpayers: 5000,
         compliantTaxpayers: 1000,
         actualLandValue: 30000,
@@ -112,6 +112,16 @@ const PropertyTaxAnalysis: FC<PropertyTaxAnalysisProps> = ({ onMetricsChange }) 
         category.id === categoryId 
           ? { ...category, [field]: value }
           : category
+      )
+    }));
+  };
+
+  // Handle category name change
+  const handleCategoryNameChange = (categoryId: string, newName: string) => {
+    setMetrics(prev => ({
+      ...prev,
+      categories: prev.categories.map(cat =>
+        cat.id === categoryId ? { ...cat, name: newName } : cat
       )
     }));
   };
@@ -747,20 +757,29 @@ const PropertyTaxAnalysis: FC<PropertyTaxAnalysisProps> = ({ onMetricsChange }) 
             <div className="space-y-3">
               {metrics.categories.map((category, index) => (
                 <div key={index} className="bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-white/10">
-                  <button
-                    onClick={() => handleToggleCategory(category.id)}
-                    className="w-full flex items-center justify-between p-3"
-                  >
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">{category.name}</span>
-                    <svg 
-                      className={`w-4 h-4 transition-transform ${category.isExpanded ? 'rotate-180' : ''}`}
-                      fill="none" 
-                      viewBox="0 0 24 24" 
-                      stroke="currentColor"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
+                  <div className="flex items-center justify-between p-3">
+                    <div className="flex-1 flex items-center">
+                      <input
+                        type="text"
+                        value={category.name}
+                        onChange={(e) => handleCategoryNameChange(category.id, e.target.value)}
+                        className="text-sm font-medium text-gray-900 dark:text-white bg-transparent border-none focus:ring-0 focus:outline-none w-full"
+                      />
+                      <button
+                        onClick={() => handleToggleCategory(category.id)}
+                        className="ml-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
+                      >
+                        <svg 
+                          className={`w-4 h-4 transition-transform ${category.isExpanded ? 'rotate-180' : ''}`}
+                          fill="none" 
+                          viewBox="0 0 24 24" 
+                          stroke="currentColor"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
 
                   {category.isExpanded && (
                     <div className="p-3 pt-0 space-y-3">

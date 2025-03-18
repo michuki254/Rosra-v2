@@ -48,7 +48,7 @@ export default function LongTermUserChargeAnalysis({ onMetricsChange }: { onMetr
 
   const [categories, setCategories] = useState<Category[]>([
     {
-      name: 'Category A',
+      name: 'Commercial Leases',
       isExpanded: false,
       estimatedLeasees: 600,
       actualLeasees: 500,
@@ -56,7 +56,7 @@ export default function LongTermUserChargeAnalysis({ onMetricsChange }: { onMetr
       actualRate: 50
     },
     {
-      name: 'Category B',
+      name: 'Residential Leases',
       isExpanded: false,
       estimatedLeasees: 100,
       actualLeasees: 50,
@@ -64,7 +64,7 @@ export default function LongTermUserChargeAnalysis({ onMetricsChange }: { onMetr
       actualRate: 20
     },
     {
-      name: 'Category C',
+      name: 'Land Leases',
       isExpanded: false,
       estimatedLeasees: 300,
       actualLeasees: 150,
@@ -94,6 +94,12 @@ export default function LongTermUserChargeAnalysis({ onMetricsChange }: { onMetr
   const updateCategory = (index: number, field: keyof Category, value: number | string) => {
     setCategories(cats => cats.map((cat, i) => 
       i === index ? { ...cat, [field]: value } : cat
+    ));
+  };
+
+  const handleCategoryNameChange = (index: number, newName: string) => {
+    setCategories(cats => cats.map((cat, i) => 
+      i === index ? { ...cat, name: newName } : cat
     ));
   };
 
@@ -417,14 +423,30 @@ export default function LongTermUserChargeAnalysis({ onMetricsChange }: { onMetr
 
           <div className="space-y-4">
             {categories.map((category, index) => (
-              <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg">
-                <button
-                  onClick={() => toggleCategory(index)}
-                  className="w-full px-4 py-3 flex justify-between items-center text-left"
-                >
-                  <span className="font-medium text-gray-900 dark:text-white">{category.name}</span>
-                  <ChevronDownIcon className={`w-5 h-5 transform transition-transform ${category.isExpanded ? 'rotate-180' : ''}`} />
-                </button>
+              <div key={index} className="bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-white/10">
+                <div className="flex items-center justify-between p-3">
+                  <div className="flex-1 flex items-center">
+                    <input
+                      type="text"
+                      value={category.name}
+                      onChange={(e) => handleCategoryNameChange(index, e.target.value)}
+                      className="text-sm font-medium text-gray-900 dark:text-white bg-transparent border-none focus:ring-0 focus:outline-none w-full"
+                    />
+                    <button
+                      onClick={() => toggleCategory(index)}
+                      className="ml-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
+                    >
+                      <svg 
+                        className={`w-4 h-4 transition-transform ${category.isExpanded ? 'rotate-180' : ''}`}
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
                 
                 {category.isExpanded && (
                   <div className="px-4 pb-4 space-y-4">
