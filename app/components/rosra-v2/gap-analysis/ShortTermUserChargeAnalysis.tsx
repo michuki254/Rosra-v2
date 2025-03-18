@@ -715,13 +715,7 @@ const ShortTermUserChargeAnalysis = forwardRef(({ onDataChange, initialData }: S
               formatCurrency={formatCurrency}
             />
 
-            {/* Revenue Summary Cards */}
-            <RevenueSummaryCards
-              actualRevenue={actualRevenue}
-              totalPotentialRevenue={totalPotentialRevenue}
-              totalGapShortTermFees={totalGapShortTermFees}
-              formatCurrency={formatCurrency}
-            />
+           
 
             {/* Gap Analysis Chart */}
             <GapAnalysisChart

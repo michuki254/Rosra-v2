@@ -1,6 +1,7 @@
 import { Bar } from 'react-chartjs-2';
 import { DocumentTextIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { RevenueGapMessage } from './RevenueGapMessage';
+import { RevenueSummaryCards } from './RevenueSummaryCards';
 
 interface RevenueAnalysisChartProps {
   actualRevenue: number;
@@ -138,7 +139,13 @@ export const RevenueAnalysisChart: React.FC<RevenueAnalysisChartProps> = ({
           </div>
         )}
       </div>
-
+  {/* Revenue Summary Cards */}
+  <RevenueSummaryCards
+              actualRevenue={actualRevenue}
+              totalPotentialRevenue={totalPotentialRevenue}
+              totalGapShortTermFees={totalGapShortTermFees}
+              formatCurrency={formatCurrency}
+            />
       {/* Analysis Message */}
       <RevenueGapMessage
         percentage={percentage}

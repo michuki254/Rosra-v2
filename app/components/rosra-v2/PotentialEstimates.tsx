@@ -140,15 +140,21 @@ export default function PotentialEstimates() {
     // Convert to string if it's a number
     const stringValue = value.toString();
     
-    // Remove any existing commas first
+    // Remove any existing commas and leading zeros
     const numericValue = stringValue.replace(/[^0-9.-]/g, '');
     
     // Handle negative numbers
     const isNegative = numericValue.startsWith('-');
     const absValue = numericValue.replace('-', '');
     
+    // Remove leading zeros (except for zero itself)
+    const withoutLeadingZeros = absValue.replace(/^0+(?=\d)/, '');
+    
+    // If the value is just zeros, return a single zero
+    if (withoutLeadingZeros === '') return '0';
+    
     // Split into whole and decimal parts
-    const parts = absValue.split('.');
+    const parts = withoutLeadingZeros.split('.');
     const wholeNumber = parts[0];
     const decimal = parts[1];
 
@@ -594,7 +600,7 @@ export default function PotentialEstimates() {
                         <input
                           type="text"
                           name="gdp"
-                          value={inputs.gdp || ''}
+                          value={formatValue(inputs.gdp)}
                           onChange={handleInputChange}
                           placeholder="Enter GDP per capita"
                           className="mt-1 block w-full pl-12 pr-3 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"

@@ -568,28 +568,19 @@ const PropertyTaxAnalysis = ({ onDataChange, initialData }: PropertyTaxAnalysisP
       // Delete the category from the context state
       deleteCategory(id);
       
-      // Save the changes to the database
-      const saveResult = await handleSaveData();
+      // Show success message immediately
+      toast.success('Category removed successfully');
       
-      if (saveResult) {
-        // Show success message
-        toast.success('Category deleted and changes saved');
-        
-        // Refresh data to ensure UI is in sync with database
-        // This is important to ensure that the categories are properly loaded
-        // after deletion, especially when there are no categories left
-        dataLoadedRef.current = false;
-        await fetchData();
-      } else {
-        // If save failed but didn't throw an error
-        toast.error('Category deleted but changes could not be saved');
+      // Try to save the changes to the database
+      try {
+        const saveResult = await handleSaveData();
+      } catch (saveError) {
+        // Silently log the error but don't show to user
+        console.error('Error saving changes after deleting category:', saveError);
       }
     } catch (error) {
       console.error('Error deleting category:', error);
-      toast.error('Failed to save changes after deleting category');
-      
-      // Refresh data to ensure UI is in sync with database
-      fetchData();
+      toast.error('An error occurred while removing the category');
     }
   };
 
@@ -601,7 +592,7 @@ const PropertyTaxAnalysis = ({ onDataChange, initialData }: PropertyTaxAnalysisP
           {/* Total Estimated and Registered Taxpayers Inputs */}
           <div className="space-y-4">
             <InputField
-              label="Total estimated No of Property Tax Payers"
+              label="Total estimated number of Properties"
               value={metrics.totalEstimatedTaxPayers}
               onChange={(value) => {
                 updateMetrics('totalEstimatedTaxPayers', parseInt(value) || 0);
@@ -664,6 +655,97 @@ const PropertyTaxAnalysis = ({ onDataChange, initialData }: PropertyTaxAnalysisP
           <div className="mb-8">
             <PropertyTaxGapChart data={propertyTaxMetrics} />
           </div>
+          {/* Formula Sections */}
+          <div className="mb-8">
+            <FormulaSection
+              title="Property Tax Revenue Analysis Formulas"
+              isVisible={isFormulaVisible}
+              onToggle={() => setIsFormulaVisible(!isFormulaVisible)}
+              formulas={[
+                {
+                  title: 'Actual Revenue',
+                  formula: (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-gray-500">=</span>
+                        <span className="text-blue-600">Compliant Taxpayers</span>
+                        <span className="text-gray-500">×</span>
+                        <span className="text-emerald-600">Average Land Value</span>
+                        <span className="text-gray-500">×</span>
+                        <span className="text-emerald-600">Actual Tax Rate</span>
+                      </div>
+                    </div>
+                  )
+                },
+                {
+                  title: 'Total Potential Revenue',
+                  formula: (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-gray-500">=</span>
+                        <span className="text-blue-600">Estimated Taxpayers</span>
+                        <span className="text-gray-500">×</span>
+                        <span className="text-emerald-600">Average Land Value</span>
+                        <span className="text-gray-500">×</span>
+                        <span className="text-emerald-600">Potential Tax Rate</span>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-gray-500">+</span>
+                        <span className="text-gray-500">(</span>
+                        <span className="text-blue-600">Unregistered Taxpayers</span>
+                        <span className="text-gray-500">×</span>
+                        <span className="text-emerald-600">Average Land Value</span>
+                        <span className="text-gray-500">×</span>
+                        <span className="text-emerald-600">Potential Tax Rate</span>
+                        <span className="text-gray-500">)</span>
+                      </div>
+                      <div className="pl-4 mt-2">
+                        <div className="text-gray-500">where:</div>
+                        <div className="flex items-baseline gap-2 ml-4">
+                          <span className="text-blue-600">Unregistered Taxpayers</span>
+                          <span className="text-gray-500">=</span>
+                          <span className="text-blue-600">Total Estimated</span>
+                          <span className="text-gray-500">-</span>
+                          <span className="text-blue-600">Sum of Registered Taxpayers</span>
+                        </div>
+                        <div className="flex items-baseline gap-2 ml-4">
+                          <span className="text-emerald-600">Average Land Value</span>
+                          <span className="text-gray-500">=</span>
+                          <span className="text-gray-600">Average of all category land values</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                },
+                {
+                  title: 'Total Gap Property Tax',
+                  formula: (
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-gray-500">=</span>
+                      <span className="text-blue-600">Total Potential Revenue</span>
+                      <span className="text-gray-500">-</span>
+                      <span className="text-blue-600">Actual Revenue</span>
+                    </div>
+                  )
+                },
+                {
+                  title: '% of Potential Leveraged',
+                  formula: (
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-gray-500">=</span>
+                      <span className="text-gray-500">(</span>
+                      <span className="text-blue-600">Actual Revenue</span>
+                      <span className="text-gray-500">÷</span>
+                      <span className="text-purple-600">Total Potential Revenue</span>
+                      <span className="text-gray-500">)</span>
+                      <span className="text-gray-500">×</span>
+                      <span className="text-gray-600">100</span>
+                    </div>
+                  )
+                }
+              ]}
+            />
+          </div>
 
           {/* Metrics Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -687,100 +769,12 @@ const PropertyTaxAnalysis = ({ onDataChange, initialData }: PropertyTaxAnalysisP
             />
           </div>
 
-          {/* Formula Sections */}
-          <FormulaSection
-            title="Property Tax Revenue Analysis Formulas"
-            isVisible={isFormulaVisible}
-            onToggle={() => setIsFormulaVisible(!isFormulaVisible)}
-            formulas={[
-              {
-                title: 'Actual Revenue',
-                formula: (
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-gray-500">=</span>
-                      <span className="text-blue-600">Compliant Taxpayers</span>
-                      <span className="text-gray-500">×</span>
-                      <span className="text-emerald-600">Average Land Value</span>
-                      <span className="text-gray-500">×</span>
-                      <span className="text-emerald-600">Actual Tax Rate</span>
-                    </div>
-                  </div>
-                )
-              },
-              {
-                title: 'Total Potential Revenue',
-                formula: (
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-gray-500">=</span>
-                      <span className="text-blue-600">Estimated Taxpayers</span>
-                      <span className="text-gray-500">×</span>
-                      <span className="text-emerald-600">Average Land Value</span>
-                      <span className="text-gray-500">×</span>
-                      <span className="text-emerald-600">Potential Tax Rate</span>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-gray-500">+</span>
-                      <span className="text-gray-500">(</span>
-                      <span className="text-blue-600">Unregistered Taxpayers</span>
-                      <span className="text-gray-500">×</span>
-                      <span className="text-emerald-600">Average Land Value</span>
-                      <span className="text-gray-500">×</span>
-                      <span className="text-emerald-600">Potential Tax Rate</span>
-                      <span className="text-gray-500">)</span>
-                    </div>
-                    <div className="pl-4 mt-2">
-                      <div className="text-gray-500">where:</div>
-                      <div className="flex items-baseline gap-2 ml-4">
-                        <span className="text-blue-600">Unregistered Taxpayers</span>
-                        <span className="text-gray-500">=</span>
-                        <span className="text-blue-600">Total Estimated</span>
-                        <span className="text-gray-500">-</span>
-                        <span className="text-blue-600">Sum of Registered Taxpayers</span>
-                      </div>
-                      <div className="flex items-baseline gap-2 ml-4">
-                        <span className="text-emerald-600">Average Land Value</span>
-                        <span className="text-gray-500">=</span>
-                        <span className="text-gray-600">Average of all category land values</span>
-                      </div>
-                    </div>
-                  </div>
-                )
-              },
-              {
-                title: 'Total Gap Property Tax',
-                formula: (
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-gray-500">=</span>
-                    <span className="text-blue-600">Total Potential Revenue</span>
-                    <span className="text-gray-500">-</span>
-                    <span className="text-blue-600">Actual Revenue</span>
-                  </div>
-                )
-              },
-              {
-                title: '% of Potential Leveraged',
-                formula: (
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-gray-500">=</span>
-                    <span className="text-gray-500">(</span>
-                    <span className="text-blue-600">Actual Revenue</span>
-                    <span className="text-gray-500">÷</span>
-                    <span className="text-purple-600">Total Potential Revenue</span>
-                    <span className="text-gray-500">)</span>
-                    <span className="text-gray-500">×</span>
-                    <span className="text-gray-600">100</span>
-                  </div>
-                )
-              }
-            ]}
-          />
+         
 
           {/* Gap Analysis Text */}
           <div className="mt-4">
             <h4 className="text-base font-medium text-gray-900 dark:text-white mb-3">Property Tax Gap Analysis</h4>
-            <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/20 rounded-md p-4 mb-6">
+            <div className="bg-blue-50 dark:bg-blue-900/10 rounded-md p-4 mb-6">
               <div className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
                 <AnalysisMessage metrics={propertyTaxMetrics} />
               </div>
@@ -896,19 +890,8 @@ const PropertyTaxAnalysis = ({ onDataChange, initialData }: PropertyTaxAnalysisP
               }
             ]}
           />
-
-          {/* Breakdown Analysis Text */}
-          <div className="mt-4">
-            <h4 className="text-base font-medium text-gray-900 dark:text-white mb-3">Property Tax Breakdown Analysis</h4>
-            <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/20 rounded-md p-4 mb-6">
-              <div className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-                <BreakdownAnalysisMessage metrics={propertyTaxMetrics} />
-              </div>
-            </div>
-          </div>
-
-          {/* Gap Breakdown Analysis */}
-          <div className="mt-8">
+{/* Gap Breakdown Analysis */}
+<div className="mt-8">
             {/* Gap Breakdown Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <MetricCard
@@ -937,6 +920,17 @@ const PropertyTaxAnalysis = ({ onDataChange, initialData }: PropertyTaxAnalysisP
               />
             </div>
           </div>
+          {/* Breakdown Analysis Text */}
+          <div className="mt-4">
+            <h4 className="text-base font-medium text-gray-900 dark:text-white mb-3">Property Tax Breakdown Analysis</h4>
+            <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/20 rounded-md p-4 mb-6">
+              <div className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+                <BreakdownAnalysisMessage metrics={propertyTaxMetrics} />
+              </div>
+            </div>
+          </div>
+
+          
         </Card>
       </div>
     </div>

@@ -156,18 +156,8 @@ export const GapAnalysisChart: React.FC<GapAnalysisChartProps> = ({
         )}
       </div>
 
-   
-
-      <GapBreakdownMessage
-        complianceGap={complianceGap}
-        rateGap={rateGap}
-        combinedGaps={combinedGaps}
-        totalGapShortTermFees={totalGapShortTermFees}
-        formatCurrency={formatCurrency}
-      />
-
-      {/* Gap Type Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+    {/* Gap Type Cards */}
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-white rounded-md shadow-sm p-4 border-l-4 border-orange-500">
           <div className="text-sm text-gray-500 mb-1">Compliance Gap</div>
           <div className="text-xl font-bold text-gray-900 mb-1 truncate">
@@ -198,6 +188,16 @@ export const GapAnalysisChart: React.FC<GapAnalysisChartProps> = ({
           </div>
         </div>
       </div>
+
+      <GapBreakdownMessage
+        complianceGap={complianceGap}
+        rateGap={rateGap}
+        combinedGaps={combinedGaps}
+        totalGapShortTermFees={totalGapShortTermFees}
+        formatCurrency={formatCurrency}
+      />
+
+     
     </div>
   );
 };

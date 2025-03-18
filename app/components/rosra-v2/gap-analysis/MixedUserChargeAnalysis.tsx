@@ -111,27 +111,34 @@ export default function MixedUserChargeAnalysis({ onMetricsChange }: MixedUserCh
               <div className="space-y-8">
                 {/* Revenue Analysis Chart */}
                 <MixedRevenueAnalysisChart />
-
+ {/* Formula Sections */}
+ <div className="space-y-6">
+                  <FormulaSection type="gap" />
+                  </div>
                 {/* Revenue Summary Cards */}
                 <RevenueSummaryCards />
 
                 {/* Analysis Text Sections */}
                 <div className="space-y-6">
                   <RevenueAnalysisText />
-                  <GapAnalysisText />
+                 
                 </div>
 
-                {/* Formula Sections */}
-                <div className="space-y-6">
-                  <FormulaSection type="gap" />
-                  <FormulaSection type="revenue" />
-                </div>
+              
 
                 {/* Gap Analysis Chart */}
                 <MixedGapAnalysisChart />
-
-                {/* Gap Breakdown Cards */}
-                <GapBreakdownCards />
+  {/* Formula Sections */}
+  <div className="space-y-6">
+                  
+                  <FormulaSection type="revenue" />
+                </div>
+                  {/* Gap Breakdown Cards */}
+                  <GapBreakdownCards />
+                <div className="space-y-6">
+                <GapAnalysisText />
+                </div>
+              
               </div>
             </div>
           </div>
