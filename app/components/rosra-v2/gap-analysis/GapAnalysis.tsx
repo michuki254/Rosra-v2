@@ -725,12 +725,6 @@ export default function GapAnalysis({
             <p className="text-sm text-yellow-700">
               <strong>No report selected.</strong> You can still analyze data, but to save your analysis, you need to create a report first.
             </p>
-            <button
-              onClick={createSampleReport}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              Create Sample Report
-            </button>
           </div>
         </div>
       )}
@@ -806,14 +800,6 @@ export default function GapAnalysis({
                 Set ID
               </button>
             </div>
-            
-            {/* Create sample report button */}
-            <button
-              onClick={createSampleReport}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-            >
-              Create New Sample Report
-            </button>
             
             {/* Set sample mixed charge data button */}
             <button

@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import ThemeToggle from './ThemeToggle'
 import { useSession, signOut } from 'next-auth/react'
 
 export default function TopBar() {
@@ -59,7 +58,6 @@ export default function TopBar() {
           </>
         )}
         
-        <ThemeToggle />
       </div>
     </div>
   )

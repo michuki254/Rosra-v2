@@ -541,16 +541,6 @@ export default function RosraV2Main() {
                 <div className="w-full h-full flex flex-col bg-white rounded-lg shadow-sm">
                   {/* Top Buttons Container */}
                   <div className="flex justify-end mb-4 gap-2 p-4 border-b">
-                    {!reportId && (
-                      <RosraButton
-                        variant="primary"
-                        icon={<DocumentTextIcon className="w-5 h-5" />}
-                        onClick={createSampleReport}
-                      >
-                        Create Sample Report
-                      </RosraButton>
-                    )}
-                    
                     <RosraButton
                       variant="primary"
                       icon={<SaveIcon />}
