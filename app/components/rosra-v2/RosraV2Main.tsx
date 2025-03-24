@@ -62,7 +62,13 @@ export default function RosraV2Main() {
     updateLongTermData,
     updateMixedChargeData
   } = useUnifiedReports();
-  const { selectedCountry, setSelectedCountry, countries } = useCurrency();
+  const { 
+    selectedCountry, 
+    setSelectedCountry, 
+    countries,
+    selectedState,
+    setSelectedState
+  } = useCurrency();
   const { inputs: analysisInputs, updateInputs: updateAnalysisInputs } = useAnalysis();
   const [saveSuccess, setSaveSuccess] = useState(false);
   const searchParams = useSearchParams();
@@ -79,6 +85,14 @@ export default function RosraV2Main() {
   const propertyTaxRef = useRef<any>(null);
   const licenseRef = useRef<any>(null);
   const hasAttemptedCreateRef = useRef(false);
+
+  // Initialize selectedState from analysisInputs when component mounts
+  useEffect(() => {
+    if (analysisInputs.state && selectedState === undefined) {
+      setSelectedState(analysisInputs.state);
+      console.log('Initialized selectedState from analysisInputs:', analysisInputs.state);
+    }
+  }, [analysisInputs.state, selectedState, setSelectedState]);
 
   // Function to handle property tax data from the GapAnalysis component
   const handlePropertyTaxData = useCallback((data: any) => {
@@ -360,8 +374,47 @@ export default function RosraV2Main() {
   }, [session?.user?.email, reportId]);
 
   const handleExport = () => {
-    // TODO: Implement export functionality
-    console.log('Export clicked');
+    try {
+      import('@/app/utils/pdfExport').then(({ exportAnalysisReport }) => {
+        // Log what we're working with
+        console.log('Selected Country:', selectedCountry);
+        console.log('Analysis Inputs:', analysisInputs);
+        console.log('Current UI Selected State (direct from context):', selectedState);
+        
+        const reportData = {
+          country: selectedCountry?.name || 'Unknown',
+          countryCode: selectedCountry?.iso2 || undefined,
+          state: selectedState || '', // Use the current state directly from the currency context
+          financialYear: analysisInputs.financialYear || new Date().getFullYear().toString(),
+          currency: selectedCountry?.currency || 'USD',
+          currencySymbol: selectedCountry?.currency_symbol || '$',
+          flagEmoji: selectedCountry?.emoji || '',
+          actualOSR: analysisInputs.actualOSR || '0',
+          budgetedOSR: analysisInputs.budgetedOSR || '0',
+          population: analysisInputs.population || '0',
+          gdpPerCapita: analysisInputs.gdp || '0',
+          propertyTax: propertyTaxData,
+          license: licenseData,
+          shortTerm: shortTermData,
+          longTerm: longTermData,
+          mixedCharge: mixedChargeData
+        };
+        
+        // Log the final report data with its state property
+        console.log('Exporting report data:', reportData);
+        console.log('State being used in export:', reportData.state);
+        
+        // Export the report
+        exportAnalysisReport(reportData);
+        toast.success('Analysis report exported successfully');
+      }).catch(error => {
+        console.error('Error in PDF module:', error);
+        toast.error('Failed to export analysis report');
+      });
+    } catch (error) {
+      console.error('Error importing export module:', error);
+      toast.error('Failed to export analysis report');
+    }
   };
 
   // Handle saving the report

@@ -28,8 +28,8 @@ interface AnalysisInputs {
 }
 
 interface PotentialEstimatesProps {
-  onInputChange: (inputs: AnalysisInputs) => void
-  activeTab: string
+  onInputChange?: (inputs: AnalysisInputs) => void;
+  activeTab?: string;
 }
 
 interface EstimatesSectionProps {
@@ -400,7 +400,7 @@ export default function PotentialEstimates() {
       setSelectedState(inputs.state);
       console.log(`Initialized state from context: ${inputs.state}`);
     }
-  }, [inputs.state, selectedState]);
+  }, [inputs.state, selectedState, setSelectedState]);
 
   return (
     <div className="space-y-4">
@@ -627,7 +627,7 @@ export default function PotentialEstimates() {
               <h4 className="text-sm font-medium text-blue-500 dark:text-blue-400 text-center mb-3">
                 Rapid Estimate of OSR Gap
               </h4>
-              <div className="h-[400px] w-full">
+              <div className="h-[400px] w-full gap-analysis-chart">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={getGapChartData()}
@@ -635,7 +635,7 @@ export default function PotentialEstimates() {
                       top: 20,
                       right: 80,
                       left: 80,
-                      bottom: 5,
+                      bottom: 30,
                     }}
                     barSize={400}
                     maxBarSize={600}
@@ -754,7 +754,7 @@ export default function PotentialEstimates() {
                   </h4>
                 <div className="p-6 bg-blue-50 dark:bg-blue-900/30 rounded-xl">
                  
-                  <p className="text-gray-700 dark:text-gray-200 text-base leading-relaxed">
+                  <p className="text-gray-700 dark:text-gray-200 text-base leading-relaxed gap-analysis-text">
                     {getAnalysisText() || 'Please enter all required data to see the analysis.'}
                   </p>
                 </div>
